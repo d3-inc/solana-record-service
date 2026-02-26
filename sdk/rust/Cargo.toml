@@ -8,6 +8,7 @@ repository = "https://github.com/solana-foundation/solana-record-service"
 
 [lib]
 name = "solana_record_service_client"
+path = "src/lib_entry.rs"
 
 [dependencies]
 kaigan = ">=0.2.6"
@@ -18,3 +19,5 @@ solana-pubkey = "2.3.0"
 solana-account-info = "2.3.0"
 solana-program-entrypoint = "2.3.0"
 solana-cpi = "2.2.1"
+idna = "1.1.0"
+sha3 = "0.10.8"
