@@ -1,4 +1,5 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, publicKey, publicKeyBytes } from '@metaplex-foundation/umi';
+import { PublicKey as Web3PublicKey } from '@solana/web3.js';
 import { SRS_DEFAULT_PROGRAM_ID, SRS_RECORD_PDA_SEED } from './constants';
 import { ResolutionInputError } from './errors';
 
@@ -13,13 +14,18 @@ export function findRecordPda(
     );
   }
 
-  return PublicKey.findProgramAddressSync(
-    [SRS_RECORD_PDA_SEED, classAddress.toBuffer(), Buffer.from(tokenId)],
-    programId
+  const [recordPda, bump] = Web3PublicKey.findProgramAddressSync(
+    [
+      Buffer.from(SRS_RECORD_PDA_SEED),
+      Buffer.from(publicKeyBytes(classAddress)),
+      Buffer.from(tokenId),
+    ],
+    new Web3PublicKey(programId)
   );
+
+  return [publicKey(recordPda.toBase58()), bump];
 }
 
 export function reverseRecordSeed(wallet: string): Uint8Array {
-  const walletPk = new PublicKey(wallet);
-  return walletPk.toBytes();
+  return publicKeyBytes(wallet);
 }

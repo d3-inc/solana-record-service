@@ -1,6 +1,8 @@
 import { expect } from 'chai';
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@metaplex-foundation/umi';
+import type { Record } from '../src/accounts';
 import {
+  DEFAULT_SOLANA_CAIP2,
   decodeSrsRecord,
   DomaForwardResolver,
   DomaSrsResolver,
@@ -10,26 +12,30 @@ import {
   reverseRecordSeed,
   serializeResolutionTuples,
   SrsReverseResolver,
-  type RawRecordAccountProvider,
+  type RecordAccountProvider,
 } from '../src/resolution';
-import { buildSrsRecordAccountData, deterministicPublicKey } from './helpers';
+import {
+  buildSrsRecordAccount,
+  buildSrsRecordAccountData,
+  deterministicPublicKey,
+} from './helpers';
 
-class InMemoryRecordProvider implements RawRecordAccountProvider {
-  private readonly records = new Map<string, Uint8Array>();
+class InMemoryRecordProvider implements RecordAccountProvider {
+  private readonly records = new Map<string, Record>();
 
-  put(recordPda: PublicKey, data: Uint8Array): void {
-    this.records.set(recordPda.toBase58(), data);
+  put(recordPda: PublicKey, record: Record): void {
+    this.records.set(recordPda, record);
   }
 
-  async fetchRawRecordAccount(recordPda: PublicKey): Promise<Uint8Array | null> {
-    return this.records.get(recordPda.toBase58()) ?? null;
+  async fetchRecord(recordPda: PublicKey): Promise<Record | null> {
+    return this.records.get(recordPda) ?? null;
   }
 }
 
 describe('resolution codec', () => {
   it('serializes and parses resolution tuples', () => {
     const tuples = [
-      ['WALLET:solana:mainnet', deterministicPublicKey(88).toBase58()],
+      [`WALLET:${DEFAULT_SOLANA_CAIP2}`, deterministicPublicKey(88)],
       ['NAME', 'alice.sol'],
     ] as const;
 
@@ -41,7 +47,7 @@ describe('resolution codec', () => {
 
   it('emits UTF-8 payload compatible with current SRS string record data', () => {
     const tuples = [
-      ['WALLET', deterministicPublicKey(89).toBase58()],
+      ['WALLET', deterministicPublicKey(89)],
       ['NAME', 'alice.sol'],
     ] as const;
 
@@ -67,8 +73,8 @@ describe('resolution codec', () => {
     });
 
     const decoded = decodeSrsRecord(rawRecord);
-    expect(decoded.class.toBase58()).to.equal(classAddress.toBase58());
-    expect(decoded.owner.toBase58()).to.equal(ownerAddress.toBase58());
+    expect(decoded.class).to.equal(classAddress);
+    expect(decoded.owner).to.equal(ownerAddress);
     expect(decoded.expiry).to.equal(123n);
     expect(parseResolutionTuples(decoded.data)).to.deep.equal([['NAME', 'alice.sol']]);
   });
@@ -78,26 +84,26 @@ describe('DomaForwardResolver', () => {
   it('resolves forward records with chain-aware last-write-wins', async () => {
     const domaClassAddress = deterministicPublicKey(30);
     const ownerAddress = deterministicPublicKey(32);
-    const latestWallet = deterministicPublicKey(33).toBase58();
+    const latestWallet = deterministicPublicKey(33);
 
     const provider = new InMemoryRecordProvider();
     const resolver = new DomaForwardResolver({
       provider,
       domaClassAddress,
-      defaultChainCaip2: 'solana:mainnet',
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
     });
 
     const seed = namehash('alice.sol');
-    const [recordPda] = findRecordPda(domaClassAddress, seed);
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
 
     provider.put(
       recordPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: domaClassAddress,
         ownerAddress,
         seed,
         data: serializeResolutionTuples([
-          ['WALLET:solana:mainnet', deterministicPublicKey(34).toBase58()],
+          [`WALLET:${DEFAULT_SOLANA_CAIP2}`, deterministicPublicKey(34)],
           ['WALLET:eip155:1', '0x123'],
           ['WALLET', latestWallet],
         ]),
@@ -111,27 +117,27 @@ describe('DomaForwardResolver', () => {
   it('resolves token-owned forward records and supports DID-PKH wallet values', async () => {
     const domaClassAddress = deterministicPublicKey(35);
     const tokenOwnerAddress = deterministicPublicKey(37);
-    const wallet = deterministicPublicKey(38).toBase58();
+    const wallet = deterministicPublicKey(38);
 
     const provider = new InMemoryRecordProvider();
     const resolver = new DomaForwardResolver({
       provider,
       domaClassAddress,
-      defaultChainCaip2: 'solana:mainnet',
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
     });
 
     const seed = namehash('tokenized.sol');
-    const [recordPda] = findRecordPda(domaClassAddress, seed);
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
 
     provider.put(
       recordPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: domaClassAddress,
         ownerAddress: tokenOwnerAddress,
         ownerType: 1,
         seed,
         data: serializeResolutionTuples([
-          ['WALLET', `did:pkh:solana:mainnet:${wallet}`],
+          ['WALLET', `did:pkh:${DEFAULT_SOLANA_CAIP2}:${wallet}`],
         ]),
       })
     );
@@ -143,21 +149,21 @@ describe('DomaForwardResolver', () => {
   it('supports CAIP-10 wallet values', async () => {
     const domaClassAddress = deterministicPublicKey(45);
     const ownerAddress = deterministicPublicKey(46);
-    const wallet = deterministicPublicKey(47).toBase58();
+    const wallet = deterministicPublicKey(47);
 
     const provider = new InMemoryRecordProvider();
     const resolver = new DomaForwardResolver({
       provider,
       domaClassAddress,
-      defaultChainCaip2: 'solana:mainnet',
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
     });
 
     const seed = namehash('caip10.sol');
-    const [recordPda] = findRecordPda(domaClassAddress, seed);
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
 
     provider.put(
       recordPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: domaClassAddress,
         ownerAddress,
         seed,
@@ -168,6 +174,37 @@ describe('DomaForwardResolver', () => {
     );
 
     const resolved = await resolver.resolve('caip10.sol');
+    expect(resolved).to.equal(wallet);
+  });
+
+  it('resolves legacy solana:mainnet chain keys for old SRS records', async () => {
+    const domaClassAddress = deterministicPublicKey(48);
+    const ownerAddress = deterministicPublicKey(49);
+    const wallet = deterministicPublicKey(50);
+
+    const provider = new InMemoryRecordProvider();
+    const resolver = new DomaForwardResolver({
+      provider,
+      domaClassAddress,
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
+    });
+
+    const seed = namehash('legacy-chain.sol');
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
+
+    provider.put(
+      recordPda,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed,
+        data: serializeResolutionTuples([
+          ['WALLET:solana:mainnet', wallet],
+        ]),
+      })
+    );
+
+    const resolved = await resolver.resolve('legacy-chain.sol');
     expect(resolved).to.equal(wallet);
   });
 });
@@ -189,7 +226,7 @@ describe('SrsReverseResolver', () => {
     const domaClassAddress = deterministicPublicKey(40);
     const reverseClassAddress = deterministicPublicKey(41);
     const ownerAddress = deterministicPublicKey(42);
-    const wallet = deterministicPublicKey(43).toBase58();
+    const wallet = deterministicPublicKey(43);
     const name = 'alice.sol';
 
     const provider = new InMemoryRecordProvider();
@@ -205,10 +242,10 @@ describe('SrsReverseResolver', () => {
     });
 
     const forwardSeed = namehash(name);
-    const [forwardPda] = findRecordPda(domaClassAddress, forwardSeed);
+    const [forwardPda] = await findRecordPda(domaClassAddress, forwardSeed);
     provider.put(
       forwardPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: domaClassAddress,
         ownerAddress,
         seed: forwardSeed,
@@ -217,10 +254,10 @@ describe('SrsReverseResolver', () => {
     );
 
     const reverseSeed = reverseRecordSeed(wallet);
-    const [reversePda] = findRecordPda(reverseClassAddress, reverseSeed);
+    const [reversePda] = await findRecordPda(reverseClassAddress, reverseSeed);
     provider.put(
       reversePda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: reverseClassAddress,
         ownerAddress,
         seed: reverseSeed,
@@ -236,7 +273,7 @@ describe('SrsReverseResolver', () => {
     const domaClassAddress = deterministicPublicKey(50);
     const reverseClassAddress = deterministicPublicKey(51);
     const ownerAddress = deterministicPublicKey(52);
-    const wallet = deterministicPublicKey(53).toBase58();
+    const wallet = deterministicPublicKey(53);
 
     const provider = new InMemoryRecordProvider();
     const forwardResolver = new DomaForwardResolver({
@@ -251,24 +288,24 @@ describe('SrsReverseResolver', () => {
     });
 
     const forwardSeed = namehash('alice.sol');
-    const [forwardPda] = findRecordPda(domaClassAddress, forwardSeed);
+    const [forwardPda] = await findRecordPda(domaClassAddress, forwardSeed);
     provider.put(
       forwardPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: domaClassAddress,
         ownerAddress,
         seed: forwardSeed,
         data: serializeResolutionTuples([
-          ['WALLET', deterministicPublicKey(54).toBase58()],
+          ['WALLET', deterministicPublicKey(54)],
         ]),
       })
     );
 
     const reverseSeed = reverseRecordSeed(wallet);
-    const [reversePda] = findRecordPda(reverseClassAddress, reverseSeed);
+    const [reversePda] = await findRecordPda(reverseClassAddress, reverseSeed);
     provider.put(
       reversePda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: reverseClassAddress,
         ownerAddress,
         seed: reverseSeed,
@@ -284,8 +321,8 @@ describe('SrsReverseResolver', () => {
     const reverseClassAddress = deterministicPublicKey(61);
     const ownerAddress = deterministicPublicKey(62);
 
-    const walletA = deterministicPublicKey(63).toBase58();
-    const walletB = deterministicPublicKey(64).toBase58();
+    const walletA = deterministicPublicKey(63);
+    const walletB = deterministicPublicKey(64);
 
     const provider = new InMemoryRecordProvider();
     const reverseResolver = new SrsReverseResolver({
@@ -296,12 +333,12 @@ describe('SrsReverseResolver', () => {
 
     const reverseSeedA = reverseRecordSeed(walletA);
     const reverseSeedB = reverseRecordSeed(walletB);
-    const [reversePdaA] = findRecordPda(reverseClassAddress, reverseSeedA);
-    const [reversePdaB] = findRecordPda(reverseClassAddress, reverseSeedB);
+    const [reversePdaA] = await findRecordPda(reverseClassAddress, reverseSeedA);
+    const [reversePdaB] = await findRecordPda(reverseClassAddress, reverseSeedB);
 
     provider.put(
       reversePdaA,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: reverseClassAddress,
         ownerAddress,
         seed: reverseSeedA,
@@ -311,7 +348,7 @@ describe('SrsReverseResolver', () => {
 
     provider.put(
       reversePdaB,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: reverseClassAddress,
         ownerAddress,
         seed: reverseSeedB,
@@ -326,7 +363,7 @@ describe('SrsReverseResolver', () => {
   it('reverse resolves from standalone reverse class without forward dependency when verification disabled', async () => {
     const reverseClassAddress = deterministicPublicKey(71);
     const ownerAddress = deterministicPublicKey(72);
-    const wallet = deterministicPublicKey(73).toBase58();
+    const wallet = deterministicPublicKey(73);
 
     const provider = new InMemoryRecordProvider();
     const reverseResolver = new SrsReverseResolver({
@@ -336,11 +373,11 @@ describe('SrsReverseResolver', () => {
     });
 
     const seed = reverseRecordSeed(wallet);
-    const [reversePda] = findRecordPda(reverseClassAddress, seed);
+    const [reversePda] = await findRecordPda(reverseClassAddress, seed);
 
     provider.put(
       reversePda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: reverseClassAddress,
         ownerAddress,
         seed,
@@ -367,21 +404,21 @@ describe('DomaSrsResolver compatibility facade', () => {
     });
 
     const seed = namehash('legacy.sol');
-    const [forwardPda] = findRecordPda(forwardClassAddress, seed);
+    const [forwardPda] = await findRecordPda(forwardClassAddress, seed);
 
     provider.put(
       forwardPda,
-      buildSrsRecordAccountData({
+      buildSrsRecordAccount({
         classAddress: forwardClassAddress,
         ownerAddress,
         seed,
         data: serializeResolutionTuples([
-          ['WALLET', deterministicPublicKey(104).toBase58()],
+          ['WALLET', deterministicPublicKey(104)],
         ]),
       })
     );
 
     const resolved = await resolver.resolve('legacy.sol');
-    expect(resolved).to.equal(deterministicPublicKey(104).toBase58());
+    expect(resolved).to.equal(deterministicPublicKey(104));
   });
 });

@@ -36,10 +36,6 @@ export function normalizeName(name: string): string {
 
 export function namehash(name: string): Uint8Array {
   const normalized = normalizeName(name);
-  if (normalized === '.') {
-    return new Uint8Array(32);
-  }
-
   const labels = normalized.split('.').filter((label) => label.length > 0);
   let node = new Uint8Array(32);
 

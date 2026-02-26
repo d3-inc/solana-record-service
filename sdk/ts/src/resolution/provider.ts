@@ -1,27 +1,27 @@
-import { Connection, PublicKey } from '@solana/web3.js';
+import { Context, PublicKey, RpcGetAccountOptions } from '@metaplex-foundation/umi';
+import { safeFetchRecord, type Record } from '../accounts';
 
-export interface RawRecordAccountProvider {
-  fetchRawRecordAccount(recordPda: PublicKey): Promise<Uint8Array | null>;
+export interface RecordAccountProvider {
+  fetchRecord(recordPda: PublicKey): Promise<Record | null>;
 }
 
-export class RpcRawRecordAccountProvider implements RawRecordAccountProvider {
-  private readonly connection: Connection;
-  private readonly commitment:
-    | 'processed'
-    | 'confirmed'
-    | 'finalized'
-    | undefined;
+export type RawRecordAccountProvider = RecordAccountProvider;
+export class RpcRecordAccountProvider implements RecordAccountProvider {
+  private readonly context: Pick<Context, 'rpc'>;
+  private readonly options: RpcGetAccountOptions | undefined;
 
   constructor(
-    connection: Connection,
-    commitment?: 'processed' | 'confirmed' | 'finalized'
+    context: Pick<Context, 'rpc'>,
+    options?: RpcGetAccountOptions
   ) {
-    this.connection = connection;
-    this.commitment = commitment;
+    this.context = context;
+    this.options = options;
   }
 
-  async fetchRawRecordAccount(recordPda: PublicKey): Promise<Uint8Array | null> {
-    const account = await this.connection.getAccountInfo(recordPda, this.commitment);
-    return account?.data ?? null;
+  async fetchRecord(recordPda: PublicKey): Promise<Record | null> {
+    return safeFetchRecord(this.context, recordPda, this.options);
   }
 }
+
+// Backward-compatible alias for earlier naming.
+export class RpcRawRecordAccountProvider extends RpcRecordAccountProvider {}

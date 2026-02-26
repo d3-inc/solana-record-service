@@ -1,11 +1,10 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, publicKey } from '@metaplex-foundation/umi';
 import { normalizeChainCaip2 } from './caip';
 import { DEFAULT_SOLANA_CAIP2, SRS_DEFAULT_PROGRAM_ID } from './constants';
 import { ResolutionInputError } from './errors';
 import { normalizeName } from './namehash';
 import { findRecordPda, reverseRecordSeed } from './pda';
-import type { RawRecordAccountProvider } from './provider';
-import { decodeSrsRecord } from './recordDecoder';
+import type { RecordAccountProvider } from './provider';
 import { parseResolutionTuples } from './tupleCodec';
 
 export interface ForwardNameResolver {
@@ -13,7 +12,7 @@ export interface ForwardNameResolver {
 }
 
 export interface SrsReverseResolverConfig {
-  provider: RawRecordAccountProvider;
+  provider: RecordAccountProvider;
   reverseClassAddress: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
@@ -22,7 +21,7 @@ export interface SrsReverseResolverConfig {
 }
 
 export class SrsReverseResolver {
-  private readonly provider: RawRecordAccountProvider;
+  private readonly provider: RecordAccountProvider;
   private readonly reverseClassAddress: PublicKey;
   private readonly programId: PublicKey;
   private readonly defaultChainCaip2: string;
@@ -47,8 +46,9 @@ export class SrsReverseResolver {
   }
 
   async reverseResolve(wallet: string): Promise<string | null> {
-    const reverseSeed = reverseRecordSeed(wallet);
-    const [recordPda] = findRecordPda(
+    const normalizedWallet = publicKey(wallet);
+    const reverseSeed = reverseRecordSeed(normalizedWallet);
+    const [recordPda] = await findRecordPda(
       this.reverseClassAddress,
       reverseSeed,
       this.programId
@@ -87,7 +87,7 @@ export class SrsReverseResolver {
       return null;
     }
 
-    return resolvedWallet === wallet ? selectedName : null;
+    return resolvedWallet === normalizedWallet ? selectedName : null;
   }
 
   async batchReverseResolve(
@@ -97,12 +97,11 @@ export class SrsReverseResolver {
   }
 
   private async fetchRecordTuples(recordPda: PublicKey) {
-    const raw = await this.provider.fetchRawRecordAccount(recordPda);
-    if (!raw) {
+    const record = await this.provider.fetchRecord(recordPda);
+    if (!record) {
       return null;
     }
 
-    const decoded = decodeSrsRecord(raw);
-    return parseResolutionTuples(decoded.data);
+    return parseResolutionTuples(record.data);
   }
 }

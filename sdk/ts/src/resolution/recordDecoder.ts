@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, publicKey } from '@metaplex-foundation/umi';
 import { SRS_RECORD_DISCRIMINATOR } from './constants';
 import { SrsRecordDecodeError } from './errors';
 
@@ -21,7 +21,7 @@ function readPublicKey(raw: Uint8Array, offset: number): PublicKey {
     throw new SrsRecordDecodeError('Unexpected EOF while reading public key');
   }
 
-  return new PublicKey(raw.subarray(offset, end));
+  return publicKey(raw.subarray(offset, end));
 }
 
 function readBigInt64LE(raw: Uint8Array, offset: number): bigint {

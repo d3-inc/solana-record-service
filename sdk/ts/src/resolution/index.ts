@@ -9,6 +9,8 @@ export {
 } from './reverseResolver';
 export { DomaSrsResolver, type DomaSrsResolverConfig } from './resolver';
 export {
+  type RecordAccountProvider,
+  RpcRecordAccountProvider,
   RpcRawRecordAccountProvider,
   type RawRecordAccountProvider,
 } from './provider';

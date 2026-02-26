@@ -1,21 +1,20 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@metaplex-foundation/umi';
 import { parseWalletTuple, normalizeChainCaip2 } from './caip';
 import { DEFAULT_SOLANA_CAIP2, SRS_DEFAULT_PROGRAM_ID } from './constants';
 import { namehash } from './namehash';
 import { findRecordPda } from './pda';
-import type { RawRecordAccountProvider } from './provider';
-import { decodeSrsRecord } from './recordDecoder';
+import type { RecordAccountProvider } from './provider';
 import { parseResolutionTuples } from './tupleCodec';
 
 export interface DomaForwardResolverConfig {
-  provider: RawRecordAccountProvider;
+  provider: RecordAccountProvider;
   domaClassAddress: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
 }
 
 export class DomaForwardResolver {
-  private readonly provider: RawRecordAccountProvider;
+  private readonly provider: RecordAccountProvider;
   private readonly domaClassAddress: PublicKey;
   private readonly programId: PublicKey;
   private readonly defaultChainCaip2: string;
@@ -35,7 +34,7 @@ export class DomaForwardResolver {
   ): Promise<string | null> {
     const normalizedChain = normalizeChainCaip2(chainCaip2);
     const tokenId = namehash(name);
-    const [recordPda] = findRecordPda(
+    const [recordPda] = await findRecordPda(
       this.domaClassAddress,
       tokenId,
       this.programId
@@ -62,12 +61,11 @@ export class DomaForwardResolver {
   }
 
   private async fetchRecordTuples(recordPda: PublicKey) {
-    const raw = await this.provider.fetchRawRecordAccount(recordPda);
-    if (!raw) {
+    const record = await this.provider.fetchRecord(recordPda);
+    if (!record) {
       return null;
     }
 
-    const decoded = decodeSrsRecord(raw);
-    return parseResolutionTuples(decoded.data);
+    return parseResolutionTuples(record.data);
   }
 }

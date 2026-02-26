@@ -1,4 +1,4 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@metaplex-foundation/umi';
 import { ResolutionInputError } from './errors';
 import {
   DomaForwardResolver,

@@ -1,9 +1,10 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, publicKey, publicKeyBytes } from '@metaplex-foundation/umi';
+import type { Record } from '../src/accounts';
 
 export function deterministicPublicKey(seedByte: number): PublicKey {
   const bytes = new Uint8Array(32);
   bytes.fill(seedByte);
-  return new PublicKey(bytes);
+  return publicKey(bytes);
 }
 
 export interface BuildSrsRecordOptions {
@@ -30,12 +31,12 @@ export function buildSrsRecordAccountData(
   let offset = 0;
   out[offset++] = 2;
 
-  out.set(options.classAddress.toBytes(), offset);
+  out.set(publicKeyBytes(options.classAddress), offset);
   offset += 32;
 
   out[offset++] = options.ownerType ?? 0;
 
-  out.set(options.ownerAddress.toBytes(), offset);
+  out.set(publicKeyBytes(options.ownerAddress), offset);
   offset += 32;
 
   out[offset++] = options.isFrozen ? 1 : 0;
@@ -48,4 +49,24 @@ export function buildSrsRecordAccountData(
 
   out.set(options.data, offset);
   return out;
+}
+
+export function buildSrsRecordAccount(options: BuildSrsRecordOptions): Record {
+  return {
+    publicKey: deterministicPublicKey(255),
+    header: {
+      executable: false,
+      lamports: { basisPoints: 0n, identifier: 'SOL', decimals: 9 },
+      owner: deterministicPublicKey(254),
+      rentEpoch: 0n,
+    },
+    discriminator: 2,
+    class: options.classAddress,
+    ownerType: options.ownerType ?? 0,
+    owner: options.ownerAddress,
+    isFrozen: options.isFrozen ?? false,
+    expiry: options.expiry ?? 0n,
+    seed: options.seed,
+    data: options.data,
+  };
 }

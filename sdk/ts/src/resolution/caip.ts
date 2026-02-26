@@ -1,10 +1,26 @@
 import { ResolutionInputError } from './errors';
+import { DEFAULT_SOLANA_CAIP2 } from './constants';
 
-const CAIP2_PATTERN = /^[a-z0-9]{3,8}:[a-zA-Z0-9-]{1,32}$/;
+// CAIP-2: namespace [-a-z0-9]{3,8}, reference [-_a-zA-Z0-9]{1,32}
+const CAIP2_PATTERN = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/;
+const LEGACY_SOLANA_MAINNET_CAIP2 = 'solana:mainnet';
+const LEGACY_SOLANA_MAINNET_BETA_CAIP2 = 'solana:mainnet-beta';
 
 export interface ParsedWalletValue {
   chainId: string;
   walletAddress: string;
+}
+
+function canonicalizeChainCaip2(chainId: string): string {
+  const lower = chainId.toLowerCase();
+  if (
+    lower === LEGACY_SOLANA_MAINNET_CAIP2 ||
+    lower === LEGACY_SOLANA_MAINNET_BETA_CAIP2
+  ) {
+    return DEFAULT_SOLANA_CAIP2;
+  }
+
+  return chainId;
 }
 
 export function normalizeChainCaip2(chainId: string): string {
@@ -13,7 +29,7 @@ export function normalizeChainCaip2(chainId: string): string {
     throw new ResolutionInputError(`Invalid CAIP-2 chain id: ${chainId}`);
   }
 
-  return trimmed.toLowerCase();
+  return canonicalizeChainCaip2(trimmed);
 }
 
 function parseCaipWalletValue(value: string): ParsedWalletValue | null {
@@ -24,10 +40,13 @@ function parseCaipWalletValue(value: string): ParsedWalletValue | null {
     return null;
   }
 
-  // did:pkh:<namespace>:<reference>:<account>
-  if (parts[0] === 'did' && parts[1] === 'pkh' && parts.length >= 5) {
-    const chain = `${parts[2]}:${parts[3]}`;
-    if (!CAIP2_PATTERN.test(chain)) {
+  // DID-PKH is supported by requirement: did:pkh:<namespace>:<reference>:<account>
+  if (parts[0]?.toLowerCase() === 'did' && parts[1]?.toLowerCase() === 'pkh' && parts.length >= 5) {
+    const chain = `${parts[2]?.trim()}:${parts[3]?.trim()}`;
+    let normalizedChain: string;
+    try {
+      normalizedChain = normalizeChainCaip2(chain);
+    } catch {
       return null;
     }
 
@@ -36,11 +55,14 @@ function parseCaipWalletValue(value: string): ParsedWalletValue | null {
       return null;
     }
 
-    return { chainId: chain.toLowerCase(), walletAddress };
+    return { chainId: normalizedChain, walletAddress };
   }
 
-  const chainId = `${parts[0]}:${parts[1]}`;
-  if (!CAIP2_PATTERN.test(chainId)) {
+  const chainId = `${parts[0]?.trim()}:${parts[1]?.trim()}`;
+  let normalizedChain: string;
+  try {
+    normalizedChain = normalizeChainCaip2(chainId);
+  } catch {
     return null;
   }
 
@@ -49,7 +71,7 @@ function parseCaipWalletValue(value: string): ParsedWalletValue | null {
     return null;
   }
 
-  return { chainId: chainId.toLowerCase(), walletAddress };
+  return { chainId: normalizedChain, walletAddress };
 }
 
 export function parseWalletTuple(
@@ -58,7 +80,8 @@ export function parseWalletTuple(
   defaultChainCaip2: string
 ): ParsedWalletValue | null {
   const normalizedDefault = normalizeChainCaip2(defaultChainCaip2);
-  const normalizedKey = key.trim().toUpperCase();
+  const trimmedKey = key.trim();
+  const normalizedKey = trimmedKey.toUpperCase();
 
   if (normalizedKey === 'WALLET') {
     const parsed = parseCaipWalletValue(value);
@@ -78,7 +101,7 @@ export function parseWalletTuple(
     return null;
   }
 
-  const chainInKeyRaw = key.slice('WALLET:'.length).trim();
+  const chainInKeyRaw = trimmedKey.slice('WALLET:'.length).trim();
   if (chainInKeyRaw.length === 0) {
     return null;
   }

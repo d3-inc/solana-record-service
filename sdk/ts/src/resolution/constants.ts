@@ -1,10 +1,10 @@
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey } from '@metaplex-foundation/umi';
+import { SOLANA_RECORD_SERVICE_PROGRAM_ID } from '../programs';
 
-export const SRS_DEFAULT_PROGRAM_ID = new PublicKey(
-  'srsUi2TVUUCyGcZdopxJauk8ZBzgAaHHZCVUhm5ifPa'
-);
+const textEncoder = new TextEncoder();
 
-export const SRS_RECORD_PDA_SEED = Buffer.from('record', 'utf8');
+export const SRS_DEFAULT_PROGRAM_ID: PublicKey = SOLANA_RECORD_SERVICE_PROGRAM_ID;
+export const SRS_RECORD_PDA_SEED = textEncoder.encode('record');
 export const SRS_RECORD_DISCRIMINATOR = 2;
 export const SRS_RECORD_TUPLE_VERSION = 1;
-export const DEFAULT_SOLANA_CAIP2 = 'solana:mainnet';
+export const DEFAULT_SOLANA_CAIP2 = 'solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ';
