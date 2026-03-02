@@ -3,10 +3,9 @@ import { accountNode, arrayTypeNode, arrayValueNode, booleanTypeNode, bytesTypeN
 import path from "path";
 import fs from "fs";
 
-const rustClientsDir = path.join(__dirname, "..", "sdk", "rust");
+const rustClientsDir = path.join(__dirname, "sdk", "rust");
 const typescriptClientsDir = path.join(
   __dirname,
-  "..",
   "sdk",
   "ts",
 );
@@ -901,36 +900,90 @@ const root = rootNode(
     })
 )
 
-function preserveConfigFiles() {
-    const filesToPreserve = ['package.json', 'tsconfig.json', '.npmignore', 'pnpm-lock.yaml', 'Cargo.toml'];
-    const preservedFiles = new Map();
-    
-    filesToPreserve.forEach(filename => {
-      const filePath = path.join(typescriptClientsDir, filename);
-      const tempPath = path.join(typescriptClientsDir, `${filename}.temp`);
-      
-      if (fs.existsSync(filePath)) {
-        fs.copyFileSync(filePath, tempPath);
-        preservedFiles.set(filename, tempPath);
-      }
-    });
-    
-    return {
-      restore: () => {
-        preservedFiles.forEach((tempPath, filename) => {
-          const filePath = path.join(typescriptClientsDir, filename);
-          if (fs.existsSync(tempPath)) {
-            fs.copyFileSync(tempPath, filePath);
-            fs.unlinkSync(tempPath);
-          }
-        });
-      }
-    };
+function preserveCustomTsFiles() {
+  const backupRoot = path.join(__dirname, '.codama-preserve');
+  const pathsToPreserve = [
+    'package.json',
+    'tsconfig.json',
+    '.npmignore',
+    'pnpm-lock.yaml',
+    'Cargo.toml',
+    'src/index.ts',
+    'src/resolution',
+  ];
+  const preservedPaths = new Map<string, string>();
+
+  for (const relativePath of pathsToPreserve) {
+    const absolutePath = path.join(typescriptClientsDir, relativePath);
+    if (!fs.existsSync(absolutePath)) {
+      continue;
+    }
+
+    const safeName = relativePath.replace(/[\\/]/g, '__');
+    const tempPath = path.join(backupRoot, safeName);
+    fs.mkdirSync(path.dirname(tempPath), { recursive: true });
+    if (fs.existsSync(tempPath)) {
+      fs.rmSync(tempPath, { recursive: true, force: true });
+    }
+    fs.cpSync(absolutePath, tempPath, { recursive: true });
+    preservedPaths.set(relativePath, tempPath);
   }
+
+  return {
+    restore: () => {
+      preservedPaths.forEach((tempPath, relativePath) => {
+        const absolutePath = path.join(typescriptClientsDir, relativePath);
+        if (fs.existsSync(absolutePath)) {
+          const stat = fs.statSync(absolutePath);
+          if (stat.isDirectory()) {
+            fs.rmSync(absolutePath, { recursive: true, force: true });
+          } else {
+            fs.unlinkSync(absolutePath);
+          }
+        }
+
+        fs.cpSync(tempPath, absolutePath, { recursive: true });
+        fs.rmSync(tempPath, { recursive: true, force: true });
+      });
+
+      if (fs.existsSync(backupRoot)) {
+        fs.rmSync(backupRoot, { recursive: true, force: true });
+      }
+    },
+  };
+}
+
+function ensureResolutionExport() {
+  const indexPath = path.join(typescriptClientsDir, 'src', 'index.ts');
+  if (!fs.existsSync(indexPath)) {
+    return;
+  }
+
+  const exportLine = "export * from './resolution';";
+  const content = fs.readFileSync(indexPath, 'utf8');
+  if (content.includes(exportLine)) {
+    return;
+  }
+
+  const lines = content.trimEnd().split('\n');
+  const insertBeforeIndex = lines.findIndex(
+    (line) => line.trim() === "export * from './shared';"
+  );
+
+  if (insertBeforeIndex >= 0) {
+    lines.splice(insertBeforeIndex, 0, exportLine);
+  } else {
+    lines.push(exportLine);
+  }
+
+  fs.writeFileSync(indexPath, `${lines.join('\n')}\n`);
+}
 
 const codama = createFromRoot(root)
 
-const configPreserver = preserveConfigFiles();
+const configPreserver = preserveCustomTsFiles();
 
 codama.accept(renderJavaScriptUmiVisitor('sdk/ts/src', { formatCode: true }));
 codama.accept(renderRustVisitor('sdk/rust/src/client', { crateFolder: 'sdk/rust/', formatCode: true }));
+configPreserver.restore();
+ensureResolutionExport();

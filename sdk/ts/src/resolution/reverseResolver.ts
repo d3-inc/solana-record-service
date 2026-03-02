@@ -1,6 +1,10 @@
 import { PublicKey } from '@solana/web3.js';
 import { normalizeChainCaip2 } from './caip';
-import { DEFAULT_SOLANA_CAIP2, SRS_DEFAULT_PROGRAM_ID } from './constants';
+import {
+  DEFAULT_SOLANA_CAIP2,
+  SRS_DEFAULT_PROGRAM_ID,
+  SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+} from './constants';
 import { ResolutionInputError } from './errors';
 import { normalizeName } from './namehash';
 import { findRecordPda, reverseRecordSeed } from './pda';
@@ -14,7 +18,7 @@ export interface ForwardNameResolver {
 
 export interface SrsReverseResolverConfig {
   provider: RawRecordAccountProvider;
-  reverseClassAddress: PublicKey;
+  reverseClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
   verifyReverseWithForward?: boolean;
@@ -31,7 +35,8 @@ export class SrsReverseResolver {
 
   constructor(config: SrsReverseResolverConfig) {
     this.provider = config.provider;
-    this.reverseClassAddress = config.reverseClassAddress;
+    this.reverseClassAddress =
+      config.reverseClassAddress ?? SRS_DEFAULT_REVERSE_CLASS_ADDRESS;
     this.programId = config.programId ?? SRS_DEFAULT_PROGRAM_ID;
     this.defaultChainCaip2 = normalizeChainCaip2(
       config.defaultChainCaip2 ?? DEFAULT_SOLANA_CAIP2

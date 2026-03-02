@@ -10,8 +10,19 @@ export {
 export { DomaSrsResolver, type DomaSrsResolverConfig } from './resolver';
 export {
   RpcRawRecordAccountProvider,
+  UmiRawRecordAccountProvider,
+  createRawRecordAccountProvider,
+  type RecordAccountProviderContext,
   type RawRecordAccountProvider,
 } from './provider';
+export {
+  resolve,
+  reverseResolve,
+  batchReverseResolve,
+  type ResolveInput,
+  type ReverseResolveInput,
+  type BatchReverseResolveInput,
+} from './api';
 
 export {
   serializeResolutionTuples,
@@ -34,6 +45,8 @@ export {
 } from './errors';
 export {
   DEFAULT_SOLANA_CAIP2,
+  SRS_DEFAULT_DOMA_CLASS_ADDRESS,
   SRS_DEFAULT_PROGRAM_ID,
+  SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
   SRS_RECORD_PDA_SEED,
 } from './constants';

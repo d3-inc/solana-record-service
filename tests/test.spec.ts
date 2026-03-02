@@ -1,55 +1,23 @@
-import * as program from "../sdk/ts/src/index";
-import { LiteSVM } from "litesvm";
-import { createSolanaClient, createTransaction, generateKeyPairSigner, getExplorerLink, getProgramDerivedAddress, getSignatureFromTransaction, KeyPairSigner, signTransactionMessageWithSigners } from "gill";
+import assert from 'node:assert/strict';
+import * as program from '../sdk/ts/src/index';
 
-describe('test', () => {
-    // Generate the keypair first
-    let authority: KeyPairSigner;
-    let classAddress: string;
-    let rpc: any;
-    let sendAndConfirmTransaction: any;
-    
-    before(async () => {  // Use before hook for async setup
-        authority = await generateKeyPairSigner();
-                
-        // Get the address from the public key for PDA derivation
-        const name = "twitter";
-        classAddress = (await getProgramDerivedAddress({
-            programAddress: program.SOLANA_RECORD_SERVICE_PROGRAM_ADDRESS,
-            seeds: [
-                "class",
-                authority.address.substring(0,32),
-                name
-            ]
-        }))[0];
+describe('sdk', () => {
+  it('exports the expected SRS program id', () => {
+    assert.equal(
+      program.SOLANA_RECORD_SERVICE_PROGRAM_ID,
+      'srsUi2TVUUCyGcZdopxJauk8ZBzgAaHHZCVUhm5ifPa'
+    );
+  });
 
-        const client = createSolanaClient({
-            urlOrMoniker: "http://localhost:8899",
-        });
-        
-        rpc = client.rpc;
-        sendAndConfirmTransaction = client.sendAndConfirmTransaction;
+  it('encodes createClass instruction data with discriminator 0', () => {
+    const encoded = program.getCreateClassInstructionDataSerializer().serialize({
+      isPermissioned: false,
+      isFrozen: false,
+      name: 'twitter',
+      metadata: 'test',
     });
 
-    it('Create a new class account', async () => {
-        const ix = program.getCreateClassInstruction({
-            isPermissioned: false,
-            isFrozen: false,
-            name: "twitter",
-            metadata: "test",
-            authority,
-            class: classAddress
-        })
-
-        console.log("{}", Buffer.from(ix.data).toString("hex"));
-
-        const { value: latestBlockhash } = await rpc.getLatestBlockhash().send();
-
-        const transaction = await signTransactionMessageWithSigners(createTransaction({ version: 0, instructions: [ix], feePayer: authority, latestBlockhash }));
-
-        const signature: string = getSignatureFromTransaction(transaction);
-        await sendAndConfirmTransaction(transaction);
-
-        console.log(getExplorerLink({ transaction: signature }));
-    });
+    assert.equal(encoded[0], 0);
+    assert.ok(encoded.length > 4);
+  });
 });

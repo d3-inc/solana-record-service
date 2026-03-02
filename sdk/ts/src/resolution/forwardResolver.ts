@@ -1,6 +1,10 @@
 import { PublicKey } from '@solana/web3.js';
 import { parseWalletTuple, normalizeChainCaip2 } from './caip';
-import { DEFAULT_SOLANA_CAIP2, SRS_DEFAULT_PROGRAM_ID } from './constants';
+import {
+  DEFAULT_SOLANA_CAIP2,
+  SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+  SRS_DEFAULT_PROGRAM_ID,
+} from './constants';
 import { namehash } from './namehash';
 import { findRecordPda } from './pda';
 import type { RawRecordAccountProvider } from './provider';
@@ -9,7 +13,7 @@ import { parseResolutionTuples } from './tupleCodec';
 
 export interface DomaForwardResolverConfig {
   provider: RawRecordAccountProvider;
-  domaClassAddress: PublicKey;
+  domaClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
 }
@@ -22,7 +26,7 @@ export class DomaForwardResolver {
 
   constructor(config: DomaForwardResolverConfig) {
     this.provider = config.provider;
-    this.domaClassAddress = config.domaClassAddress;
+    this.domaClassAddress = config.domaClassAddress ?? SRS_DEFAULT_DOMA_CLASS_ADDRESS;
     this.programId = config.programId ?? SRS_DEFAULT_PROGRAM_ID;
     this.defaultChainCaip2 = normalizeChainCaip2(
       config.defaultChainCaip2 ?? DEFAULT_SOLANA_CAIP2

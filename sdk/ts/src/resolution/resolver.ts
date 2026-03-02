@@ -1,5 +1,4 @@
 import { PublicKey } from '@solana/web3.js';
-import { ResolutionInputError } from './errors';
 import {
   DomaForwardResolver,
   type DomaForwardResolverConfig,
@@ -14,7 +13,7 @@ export interface DomaSrsResolverConfig {
   domaClassAddress?: PublicKey;
   // Backward-compatible alias for older call sites.
   forwardClassAddress?: PublicKey;
-  reverseClassAddress: PublicKey;
+  reverseClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
   verifyReverseWithForward?: boolean;
@@ -26,9 +25,6 @@ export class DomaSrsResolver {
 
   constructor(config: DomaSrsResolverConfig) {
     const domaClassAddress = config.domaClassAddress ?? config.forwardClassAddress;
-    if (!domaClassAddress) {
-      throw new ResolutionInputError('domaClassAddress is required');
-    }
 
     this.forwardResolver = new DomaForwardResolver({
       provider: config.provider,

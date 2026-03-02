@@ -10,7 +10,7 @@
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "pnpm run build",
-    "test": "mocha --require ts-node/register 'test/**/*'"
+    "test": "mocha --import=tsx 'test/**/*'"
   },
   "devDependencies": {
     "@types/chai": "^5.2.2",
