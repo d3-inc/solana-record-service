@@ -7,7 +7,16 @@ export {
   type ForwardNameResolver,
   type SrsReverseResolverConfig,
 } from './reverseResolver';
-export { DomaSrsResolver, type DomaSrsResolverConfig } from './resolver';
+export {
+  DomaSrsResolver,
+  type DomaSrsResolverConfig,
+  resolve,
+  reverseResolve,
+  batchReverseResolve,
+  type ResolveInput,
+  type ReverseResolveInput,
+  type BatchReverseResolveInput,
+} from './resolver';
 export {
   type RecordAccountProvider,
   RpcRecordAccountProvider,
@@ -36,6 +45,8 @@ export {
 } from './errors';
 export {
   DEFAULT_SOLANA_CAIP2,
+  SRS_DEFAULT_DOMA_CLASS_ADDRESS,
   SRS_DEFAULT_PROGRAM_ID,
+  SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
   SRS_RECORD_PDA_SEED,
 } from './constants';

@@ -5,6 +5,8 @@ import { DEFAULT_SOLANA_CAIP2 } from './constants';
 const CAIP2_PATTERN = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/;
 const LEGACY_SOLANA_MAINNET_CAIP2 = 'solana:mainnet';
 const LEGACY_SOLANA_MAINNET_BETA_CAIP2 = 'solana:mainnet-beta';
+const LEGACY_SOLANA_MAINNET_GENESIS_CAIP2 =
+  'solana:4sgjmw1sunhzsxgspuhpqldx6wiyjntz';
 
 export interface ParsedWalletValue {
   chainId: string;
@@ -15,7 +17,8 @@ function canonicalizeChainCaip2(chainId: string): string {
   const lower = chainId.toLowerCase();
   if (
     lower === LEGACY_SOLANA_MAINNET_CAIP2 ||
-    lower === LEGACY_SOLANA_MAINNET_BETA_CAIP2
+    lower === LEGACY_SOLANA_MAINNET_BETA_CAIP2 ||
+    lower === LEGACY_SOLANA_MAINNET_GENESIS_CAIP2
   ) {
     return DEFAULT_SOLANA_CAIP2;
   }

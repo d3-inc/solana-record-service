@@ -1,9 +1,17 @@
-import { PublicKey } from '@metaplex-foundation/umi';
+import { Context, PublicKey } from '@metaplex-foundation/umi';
+import {
+  SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+  SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+} from './constants';
 import { ResolutionInputError } from './errors';
 import {
   DomaForwardResolver,
   type DomaForwardResolverConfig,
 } from './forwardResolver';
+import {
+  type RecordAccountProvider,
+  RpcRecordAccountProvider,
+} from './provider';
 import {
   SrsReverseResolver,
   type SrsReverseResolverConfig,
@@ -14,7 +22,7 @@ export interface DomaSrsResolverConfig {
   domaClassAddress?: PublicKey;
   // Backward-compatible alias for older call sites.
   forwardClassAddress?: PublicKey;
-  reverseClassAddress: PublicKey;
+  reverseClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
   verifyReverseWithForward?: boolean;
@@ -25,10 +33,12 @@ export class DomaSrsResolver {
   private readonly reverseResolver: SrsReverseResolver;
 
   constructor(config: DomaSrsResolverConfig) {
-    const domaClassAddress = config.domaClassAddress ?? config.forwardClassAddress;
-    if (!domaClassAddress) {
-      throw new ResolutionInputError('domaClassAddress is required');
-    }
+    const domaClassAddress =
+      config.domaClassAddress ??
+      config.forwardClassAddress ??
+      SRS_DEFAULT_DOMA_CLASS_ADDRESS;
+    const reverseClassAddress =
+      config.reverseClassAddress ?? SRS_DEFAULT_REVERSE_CLASS_ADDRESS;
 
     this.forwardResolver = new DomaForwardResolver({
       provider: config.provider,
@@ -39,7 +49,7 @@ export class DomaSrsResolver {
 
     const reverseConfig: SrsReverseResolverConfig = {
       provider: config.provider,
-      reverseClassAddress: config.reverseClassAddress,
+      reverseClassAddress,
       programId: config.programId,
       defaultChainCaip2: config.defaultChainCaip2,
       verifyReverseWithForward: config.verifyReverseWithForward,
@@ -62,4 +72,97 @@ export class DomaSrsResolver {
   ): Promise<Array<string | null>> {
     return this.reverseResolver.batchReverseResolve(wallets);
   }
+}
+
+type ResolutionContext = Pick<Context, 'rpc'>;
+
+interface BaseResolveInput {
+  context?: ResolutionContext;
+  provider?: RecordAccountProvider;
+  domaClassAddress?: PublicKey;
+  forwardClassAddress?: PublicKey;
+  reverseClassAddress?: PublicKey;
+  programId?: PublicKey;
+  defaultChainCaip2?: string;
+}
+
+function getProvider(
+  context: ResolutionContext | undefined,
+  provider: RecordAccountProvider | undefined
+): RecordAccountProvider {
+  if (provider) {
+    return provider;
+  }
+
+  if (!context) {
+    throw new ResolutionInputError(
+      'context is required when provider is not provided'
+    );
+  }
+
+  return new RpcRecordAccountProvider(context);
+}
+
+export interface ResolveInput extends BaseResolveInput {
+  name: string;
+  chainCaip2?: string;
+}
+
+export async function resolve(input: ResolveInput): Promise<string | null> {
+  const provider = getProvider(input.context, input.provider);
+  const forwardResolver = new DomaForwardResolver({
+    provider,
+    domaClassAddress:
+      input.domaClassAddress ??
+      input.forwardClassAddress ??
+      SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+    programId: input.programId,
+    defaultChainCaip2: input.defaultChainCaip2,
+  });
+
+  return forwardResolver.resolve(input.name, input.chainCaip2);
+}
+
+export interface ReverseResolveInput extends BaseResolveInput {
+  wallet: string;
+  verifyReverseWithForward?: boolean;
+}
+
+export async function reverseResolve(
+  input: ReverseResolveInput
+): Promise<string | null> {
+  const provider = getProvider(input.context, input.provider);
+  const resolver = new DomaSrsResolver({
+    provider,
+    domaClassAddress: input.domaClassAddress,
+    forwardClassAddress: input.forwardClassAddress,
+    reverseClassAddress: input.reverseClassAddress,
+    programId: input.programId,
+    defaultChainCaip2: input.defaultChainCaip2,
+    verifyReverseWithForward: input.verifyReverseWithForward,
+  });
+
+  return resolver.reverseResolve(input.wallet);
+}
+
+export interface BatchReverseResolveInput extends BaseResolveInput {
+  wallets: readonly string[];
+  verifyReverseWithForward?: boolean;
+}
+
+export async function batchReverseResolve(
+  input: BatchReverseResolveInput
+): Promise<Array<string | null>> {
+  const provider = getProvider(input.context, input.provider);
+  const resolver = new DomaSrsResolver({
+    provider,
+    domaClassAddress: input.domaClassAddress,
+    forwardClassAddress: input.forwardClassAddress,
+    reverseClassAddress: input.reverseClassAddress,
+    programId: input.programId,
+    defaultChainCaip2: input.defaultChainCaip2,
+    verifyReverseWithForward: input.verifyReverseWithForward,
+  });
+
+  return resolver.batchReverseResolve(input.wallets);
 }
