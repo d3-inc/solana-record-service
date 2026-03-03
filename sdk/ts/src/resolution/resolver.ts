@@ -20,8 +20,6 @@ import {
 export interface DomaSrsResolverConfig {
   provider: DomaForwardResolverConfig['provider'];
   domaClassAddress?: PublicKey;
-  // Backward-compatible alias for older call sites.
-  forwardClassAddress?: PublicKey;
   reverseClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
@@ -35,7 +33,6 @@ export class DomaSrsResolver {
   constructor(config: DomaSrsResolverConfig) {
     const domaClassAddress =
       config.domaClassAddress ??
-      config.forwardClassAddress ??
       SRS_DEFAULT_DOMA_CLASS_ADDRESS;
     const reverseClassAddress =
       config.reverseClassAddress ?? SRS_DEFAULT_REVERSE_CLASS_ADDRESS;
@@ -80,7 +77,6 @@ interface BaseResolveInput {
   context?: ResolutionContext;
   provider?: RecordAccountProvider;
   domaClassAddress?: PublicKey;
-  forwardClassAddress?: PublicKey;
   reverseClassAddress?: PublicKey;
   programId?: PublicKey;
   defaultChainCaip2?: string;
@@ -114,7 +110,6 @@ export async function resolve(input: ResolveInput): Promise<string | null> {
     provider,
     domaClassAddress:
       input.domaClassAddress ??
-      input.forwardClassAddress ??
       SRS_DEFAULT_DOMA_CLASS_ADDRESS,
     programId: input.programId,
     defaultChainCaip2: input.defaultChainCaip2,
@@ -135,7 +130,6 @@ export async function reverseResolve(
   const resolver = new DomaSrsResolver({
     provider,
     domaClassAddress: input.domaClassAddress,
-    forwardClassAddress: input.forwardClassAddress,
     reverseClassAddress: input.reverseClassAddress,
     programId: input.programId,
     defaultChainCaip2: input.defaultChainCaip2,
@@ -157,7 +151,6 @@ export async function batchReverseResolve(
   const resolver = new DomaSrsResolver({
     provider,
     domaClassAddress: input.domaClassAddress,
-    forwardClassAddress: input.forwardClassAddress,
     reverseClassAddress: input.reverseClassAddress,
     programId: input.programId,
     defaultChainCaip2: input.defaultChainCaip2,

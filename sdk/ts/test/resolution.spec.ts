@@ -108,9 +108,9 @@ describe('DomaForwardResolver', () => {
         ownerAddress,
         seed,
         data: serializeResolutionTuples([
-          [`WALLET:${DEFAULT_SOLANA_CAIP2}`, deterministicPublicKey(34)],
-          ['WALLET:eip155:1', '0x123'],
-          ['WALLET', latestWallet],
+          ['WALLET', `${DEFAULT_SOLANA_CAIP2}:${deterministicPublicKey(34)}`],
+          ['WALLET', 'eip155:1:0x123'],
+          ['WALLET', `${DEFAULT_SOLANA_CAIP2}:${latestWallet}`],
         ]),
       })
     );
@@ -119,7 +119,7 @@ describe('DomaForwardResolver', () => {
     expect(resolved).to.equal(latestWallet);
   });
 
-  it('resolves token-owned forward records and supports DID-PKH wallet values', async () => {
+  it('resolves token-owned forward records with CAIP-10 wallet values', async () => {
     const domaClassAddress = deterministicPublicKey(35);
     const tokenOwnerAddress = deterministicPublicKey(37);
     const wallet = deterministicPublicKey(38);
@@ -142,7 +142,7 @@ describe('DomaForwardResolver', () => {
         ownerType: 1,
         seed,
         data: serializeResolutionTuples([
-          ['WALLET', `did:pkh:${DEFAULT_SOLANA_CAIP2}:${wallet}`],
+          ['WALLET', `${DEFAULT_SOLANA_CAIP2}:${wallet}`],
         ]),
       })
     );
@@ -173,7 +173,7 @@ describe('DomaForwardResolver', () => {
         ownerAddress,
         seed,
         data: serializeResolutionTuples([
-          ['WALLET', `solana:mainnet:${wallet}`],
+          ['WALLET', `${DEFAULT_SOLANA_CAIP2}:${wallet}`],
         ]),
       })
     );
@@ -182,7 +182,7 @@ describe('DomaForwardResolver', () => {
     expect(resolved).to.equal(wallet);
   });
 
-  it('resolves legacy solana:mainnet chain keys for old SRS records', async () => {
+  it('ignores non-WALLET keys', async () => {
     const domaClassAddress = deterministicPublicKey(48);
     const ownerAddress = deterministicPublicKey(49);
     const wallet = deterministicPublicKey(50);
@@ -210,38 +210,7 @@ describe('DomaForwardResolver', () => {
     );
 
     const resolved = await resolver.resolve('legacy-chain.sol');
-    expect(resolved).to.equal(wallet);
-  });
-
-  it('resolves legacy Solana genesis-hash aliases to the default Solana chain', async () => {
-    const domaClassAddress = deterministicPublicKey(51);
-    const ownerAddress = deterministicPublicKey(52);
-    const wallet = deterministicPublicKey(53);
-
-    const provider = new InMemoryRecordProvider();
-    const resolver = new DomaForwardResolver({
-      provider,
-      domaClassAddress,
-      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
-    });
-
-    const seed = namehash('legacy-genesis.sol');
-    const [recordPda] = await findRecordPda(domaClassAddress, seed);
-
-    provider.put(
-      recordPda,
-      buildSrsRecordAccount({
-        classAddress: domaClassAddress,
-        ownerAddress,
-        seed,
-        data: serializeResolutionTuples([
-          ['WALLET:solana:4sGjMW1sUnHzSxGspuhpqLDx6wiyjNtZ', wallet],
-        ]),
-      })
-    );
-
-    const resolved = await resolver.resolve('legacy-genesis.sol');
-    expect(resolved).to.equal(wallet);
+    expect(resolved).to.equal(null);
   });
 });
 
@@ -426,26 +395,26 @@ describe('SrsReverseResolver', () => {
   });
 });
 
-describe('DomaSrsResolver compatibility facade', () => {
-  it('supports legacy forwardClassAddress alias', async () => {
-    const forwardClassAddress = deterministicPublicKey(101);
+describe('DomaSrsResolver facade', () => {
+  it('supports explicit class address overrides', async () => {
+    const domaClassAddress = deterministicPublicKey(101);
     const reverseClassAddress = deterministicPublicKey(102);
     const ownerAddress = deterministicPublicKey(103);
 
     const provider = new InMemoryRecordProvider();
     const resolver = new DomaSrsResolver({
       provider,
-      forwardClassAddress,
+      domaClassAddress,
       reverseClassAddress,
     });
 
     const seed = namehash('legacy.sol');
-    const [forwardPda] = await findRecordPda(forwardClassAddress, seed);
+    const [forwardPda] = await findRecordPda(domaClassAddress, seed);
 
     provider.put(
       forwardPda,
       buildSrsRecordAccount({
-        classAddress: forwardClassAddress,
+        classAddress: domaClassAddress,
         ownerAddress,
         seed,
         data: serializeResolutionTuples([

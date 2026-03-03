@@ -5,7 +5,6 @@ export interface RecordAccountProvider {
   fetchRecord(recordPda: PublicKey): Promise<Record | null>;
 }
 
-export type RawRecordAccountProvider = RecordAccountProvider;
 export class RpcRecordAccountProvider implements RecordAccountProvider {
   private readonly context: Pick<Context, 'rpc'>;
   private readonly options: RpcGetAccountOptions | undefined;
@@ -22,6 +21,3 @@ export class RpcRecordAccountProvider implements RecordAccountProvider {
     return safeFetchRecord(this.context, recordPda, this.options);
   }
 }
-
-// Backward-compatible alias for earlier naming.
-export class RpcRawRecordAccountProvider extends RpcRecordAccountProvider {}

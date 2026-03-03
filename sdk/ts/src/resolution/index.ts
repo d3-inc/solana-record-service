@@ -20,8 +20,6 @@ export {
 export {
   type RecordAccountProvider,
   RpcRecordAccountProvider,
-  RpcRawRecordAccountProvider,
-  type RawRecordAccountProvider,
 } from './provider';
 
 export {
