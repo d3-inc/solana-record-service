@@ -29,7 +29,7 @@ export class SrsReverseResolver {
   private readonly programId: PublicKey;
   private readonly defaultChainCaip2: string;
   private readonly verifyReverseWithForward: boolean;
-  private readonly forwardVerifier?: ForwardNameResolver;
+  private readonly forwardVerifier: ForwardNameResolver | null;
 
   constructor(config: SrsReverseResolverConfig) {
     this.provider = config.provider;
@@ -39,9 +39,9 @@ export class SrsReverseResolver {
       config.defaultChainCaip2 ?? DEFAULT_SOLANA_CAIP2
     );
     this.verifyReverseWithForward = config.verifyReverseWithForward ?? true;
-    this.forwardVerifier = config.forwardVerifier;
+    this.forwardVerifier = config.forwardVerifier ?? null;
 
-    if (this.verifyReverseWithForward && !this.forwardVerifier) {
+    if (this.verifyReverseWithForward && this.forwardVerifier === null) {
       throw new ResolutionInputError(
         'forwardVerifier is required when verifyReverseWithForward is enabled'
       );
@@ -68,7 +68,7 @@ export class SrsReverseResolver {
       return selectedName;
     }
 
-    const resolvedWallet = await this.forwardVerifier?.resolve(
+    const resolvedWallet = await this.forwardVerifier!.resolve(
       selectedName,
       this.defaultChainCaip2
     );
@@ -93,7 +93,7 @@ export class SrsReverseResolver {
 
     const verified = await Promise.all(
       names.map(async (name) => {
-        const resolvedWallet = await this.forwardVerifier?.resolve(
+        const resolvedWallet = await this.forwardVerifier!.resolve(
           name,
           this.defaultChainCaip2
         );

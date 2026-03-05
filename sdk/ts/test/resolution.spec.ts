@@ -7,7 +7,6 @@ import {
   DEFAULT_SOLANA_CAIP2,
   decodeSrsRecord,
   DomaForwardResolver,
-  DomaSrsResolver,
   findRecordPda,
   namehash,
   parseResolutionTuples,
@@ -602,39 +601,6 @@ describe('SrsReverseResolver', () => {
 
     const names = await reverseResolver.batchReverseResolveAll([walletA, walletB]);
     expect(names).to.deep.equal([['a1.sol', 'a2.sol'], ['b1.sol']]);
-  });
-});
-
-describe('DomaSrsResolver facade', () => {
-  it('supports explicit class address overrides', async () => {
-    const domaClassAddress = deterministicPublicKey(101);
-    const reverseClassAddress = deterministicPublicKey(102);
-    const ownerAddress = deterministicPublicKey(103);
-
-    const provider = new InMemoryRecordProvider();
-    const resolver = new DomaSrsResolver({
-      provider,
-      domaClassAddress,
-      reverseClassAddress,
-    });
-
-    const seed = namehash('legacy.sol');
-    const [forwardPda] = await findRecordPda(domaClassAddress, seed);
-
-    provider.put(
-      forwardPda,
-      buildSrsRecordAccount({
-        classAddress: domaClassAddress,
-        ownerAddress,
-        seed,
-        data: serializeResolutionTuples([
-          ['WALLET', deterministicPublicKey(104)],
-        ]),
-      })
-    );
-
-    const resolved = await resolver.resolve('legacy.sol');
-    expect(resolved).to.equal(deterministicPublicKey(104));
   });
 });
 

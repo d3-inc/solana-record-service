@@ -8,8 +8,6 @@ export {
   type SrsReverseResolverConfig,
 } from './reverseResolver';
 export {
-  DomaSrsResolver,
-  type DomaSrsResolverConfig,
   resolve,
   resolveRecord,
   resolveRecords,
@@ -26,8 +24,8 @@ export {
   type BatchReverseResolveAllInput,
 } from './resolver';
 export {
+  createRpcRecordAccountProvider,
   type RecordAccountProvider,
-  RpcRecordAccountProvider,
 } from './provider';
 
 export {
