@@ -182,6 +182,37 @@ describe('DomaForwardResolver', () => {
     expect(resolved).to.equal(wallet);
   });
 
+  it('does not resolve DID-PKH wallet values', async () => {
+    const domaClassAddress = deterministicPublicKey(46);
+    const ownerAddress = deterministicPublicKey(47);
+    const wallet = deterministicPublicKey(48);
+
+    const provider = new InMemoryRecordProvider();
+    const resolver = new DomaForwardResolver({
+      provider,
+      domaClassAddress,
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
+    });
+
+    const seed = namehash('did-pkh.sol');
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
+
+    provider.put(
+      recordPda,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed,
+        data: serializeResolutionTuples([
+          ['WALLET', `did:pkh:${DEFAULT_SOLANA_CAIP2}:${wallet}`],
+        ]),
+      })
+    );
+
+    const resolved = await resolver.resolve('did-pkh.sol');
+    expect(resolved).to.equal(null);
+  });
+
   it('ignores non-WALLET keys', async () => {
     const domaClassAddress = deterministicPublicKey(48);
     const ownerAddress = deterministicPublicKey(49);

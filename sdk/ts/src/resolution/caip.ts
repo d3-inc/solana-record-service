@@ -25,6 +25,11 @@ function parseCaipWalletValue(value: string): ParsedWalletValue | null {
     return null;
   }
 
+  // Explicitly reject DID-PKH payloads. Resolution supports CAIP-10 values only.
+  if (parts[0]?.toLowerCase() === 'did' && parts[1]?.toLowerCase() === 'pkh') {
+    return null;
+  }
+
   const chainId = `${parts[0]?.trim()}:${parts[1]?.trim()}`;
   let normalizedChain: string;
   try {
@@ -61,6 +66,11 @@ export function parseWalletTuple(
 
   const walletAddress = value.trim();
   if (walletAddress.length === 0) {
+    return null;
+  }
+
+  // Fallback only for plain addresses. Colon-separated payloads must be valid CAIP-10.
+  if (walletAddress.includes(':')) {
     return null;
   }
 
