@@ -4,7 +4,10 @@ import { DEFAULT_SOLANA_CAIP2, SRS_DEFAULT_PROGRAM_ID } from './constants';
 import { namehash } from './namehash';
 import { findRecordPda } from './pda';
 import type { RecordAccountProvider } from './provider';
-import { parseResolutionTuples } from './tupleCodec';
+import {
+  parseResolutionTuples,
+  type ResolutionTuple,
+} from './tupleCodec';
 
 export interface DomaForwardResolverConfig {
   provider: RecordAccountProvider;
@@ -33,14 +36,7 @@ export class DomaForwardResolver {
     chainCaip2: string = this.defaultChainCaip2
   ): Promise<string | null> {
     const normalizedChain = normalizeChainCaip2(chainCaip2);
-    const tokenId = namehash(name);
-    const [recordPda] = await findRecordPda(
-      this.domaClassAddress,
-      tokenId,
-      this.programId
-    );
-
-    const tuples = await this.fetchRecordTuples(recordPda);
+    const tuples = await this.fetchNameTuples(name);
     if (!tuples) {
       return null;
     }
@@ -58,6 +54,60 @@ export class DomaForwardResolver {
     }
 
     return selectedWallet;
+  }
+
+  async resolveRecord(name: string, recordKey: string): Promise<string | null> {
+    const tuples = await this.fetchNameTuples(name);
+    if (!tuples) {
+      return null;
+    }
+
+    const normalizedKey = recordKey.trim().toUpperCase();
+    if (normalizedKey.length === 0) {
+      return null;
+    }
+
+    let selectedValue: string | null = null;
+    for (const [key, value] of tuples) {
+      if (key.trim().toUpperCase() !== normalizedKey) {
+        continue;
+      }
+
+      const candidate = value.trim();
+      if (candidate.length > 0) {
+        selectedValue = candidate;
+      }
+    }
+
+    return selectedValue;
+  }
+
+  async resolveRecords(name: string, recordKey: string): Promise<string[]> {
+    const tuples = await this.fetchNameTuples(name);
+    if (!tuples) {
+      return [];
+    }
+
+    const normalizedKey = recordKey.trim().toUpperCase();
+    if (normalizedKey.length === 0) {
+      return [];
+    }
+
+    return tuples
+      .filter(([key]) => key.trim().toUpperCase() === normalizedKey)
+      .map(([, value]) => value.trim())
+      .filter((value) => value.length > 0);
+  }
+
+  private async fetchNameTuples(name: string): Promise<ResolutionTuple[] | null> {
+    const tokenId = namehash(name);
+    const [recordPda] = await findRecordPda(
+      this.domaClassAddress,
+      tokenId,
+      this.programId
+    );
+
+    return this.fetchRecordTuples(recordPda);
   }
 
   private async fetchRecordTuples(recordPda: PublicKey) {

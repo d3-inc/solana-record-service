@@ -5,7 +5,10 @@ import { ResolutionInputError } from './errors';
 import { normalizeName } from './namehash';
 import { findRecordPda, reverseRecordSeed } from './pda';
 import type { RecordAccountProvider } from './provider';
-import { parseResolutionTuples } from './tupleCodec';
+import {
+  parseResolutionTuples,
+  type ResolutionTuple,
+} from './tupleCodec';
 
 export interface ForwardNameResolver {
   resolve(name: string, chainCaip2?: string): Promise<string | null>;
@@ -47,28 +50,14 @@ export class SrsReverseResolver {
 
   async reverseResolve(wallet: string): Promise<string | null> {
     const normalizedWallet = publicKey(wallet);
-    const reverseSeed = reverseRecordSeed(normalizedWallet);
-    const [recordPda] = await findRecordPda(
-      this.reverseClassAddress,
-      reverseSeed,
-      this.programId
-    );
-
-    const tuples = await this.fetchRecordTuples(recordPda);
+    const tuples = await this.fetchReverseTuples(normalizedWallet);
     if (!tuples) {
       return null;
     }
 
     let selectedName: string | null = null;
-    for (const [key, value] of tuples) {
-      if (key.trim().toUpperCase() !== 'NAME') {
-        continue;
-      }
-
-      const candidateName = value.trim();
-      if (candidateName.length > 0) {
-        selectedName = normalizeName(candidateName);
-      }
+    for (const name of this.extractReverseNames(tuples)) {
+      selectedName = name;
     }
 
     if (!selectedName) {
@@ -90,10 +79,67 @@ export class SrsReverseResolver {
     return resolvedWallet === normalizedWallet ? selectedName : null;
   }
 
+  async reverseResolveAll(wallet: string): Promise<string[]> {
+    const normalizedWallet = publicKey(wallet);
+    const tuples = await this.fetchReverseTuples(normalizedWallet);
+    if (!tuples) {
+      return [];
+    }
+
+    const names = this.extractReverseNames(tuples);
+    if (!this.verifyReverseWithForward) {
+      return names;
+    }
+
+    const verified = await Promise.all(
+      names.map(async (name) => {
+        const resolvedWallet = await this.forwardVerifier?.resolve(
+          name,
+          this.defaultChainCaip2
+        );
+        return resolvedWallet === normalizedWallet ? name : null;
+      })
+    );
+    return verified.filter((name): name is string => name !== null);
+  }
+
   async batchReverseResolve(
     wallets: readonly string[]
   ): Promise<Array<string | null>> {
     return Promise.all(wallets.map((wallet) => this.reverseResolve(wallet)));
+  }
+
+  async batchReverseResolveAll(
+    wallets: readonly string[]
+  ): Promise<string[][]> {
+    return Promise.all(wallets.map((wallet) => this.reverseResolveAll(wallet)));
+  }
+
+  private extractReverseNames(tuples: readonly ResolutionTuple[]): string[] {
+    const names: string[] = [];
+    for (const [key, value] of tuples) {
+      if (key.trim().toUpperCase() !== 'NAME') {
+        continue;
+      }
+
+      const candidateName = value.trim();
+      if (candidateName.length > 0) {
+        names.push(normalizeName(candidateName));
+      }
+    }
+
+    return names;
+  }
+
+  private async fetchReverseTuples(wallet: string): Promise<ResolutionTuple[] | null> {
+    const reverseSeed = reverseRecordSeed(wallet);
+    const [recordPda] = await findRecordPda(
+      this.reverseClassAddress,
+      reverseSeed,
+      this.programId
+    );
+
+    return this.fetchRecordTuples(recordPda);
   }
 
   private async fetchRecordTuples(recordPda: PublicKey) {

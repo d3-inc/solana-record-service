@@ -2,6 +2,7 @@ import { expect } from 'chai';
 import { PublicKey } from '@metaplex-foundation/umi';
 import type { Record } from '../src/accounts';
 import {
+  batchReverseResolveAll,
   batchReverseResolve,
   DEFAULT_SOLANA_CAIP2,
   decodeSrsRecord,
@@ -11,7 +12,10 @@ import {
   namehash,
   parseResolutionTuples,
   resolve,
+  resolveRecord,
+  resolveRecords,
   reverseResolve,
+  reverseResolveAll,
   reverseRecordSeed,
   serializeResolutionTuples,
   SRS_DEFAULT_DOMA_CLASS_ADDRESS,
@@ -243,6 +247,74 @@ describe('DomaForwardResolver', () => {
     const resolved = await resolver.resolve('legacy-chain.sol');
     expect(resolved).to.equal(null);
   });
+
+  it('resolves arbitrary text records by key with last-write-wins', async () => {
+    const domaClassAddress = deterministicPublicKey(51);
+    const ownerAddress = deterministicPublicKey(52);
+
+    const provider = new InMemoryRecordProvider();
+    const resolver = new DomaForwardResolver({
+      provider,
+      domaClassAddress,
+    });
+
+    const seed = namehash('alice.sol');
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
+    provider.put(
+      recordPda,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed,
+        data: serializeResolutionTuples([
+          ['URL', 'https://a.example'],
+          ['TWITTER', '@alice'],
+          ['URL', 'https://b.example'],
+        ]),
+      })
+    );
+
+    expect(await resolver.resolveRecord('alice.sol', 'url')).to.equal(
+      'https://b.example'
+    );
+    expect(await resolver.resolveRecord('alice.sol', 'twitter')).to.equal(
+      '@alice'
+    );
+    expect(await resolver.resolveRecord('alice.sol', 'ipfs')).to.equal(null);
+  });
+
+  it('resolves subdomain records the same way as root names', async () => {
+    const domaClassAddress = deterministicPublicKey(53);
+    const ownerAddress = deterministicPublicKey(54);
+    const wallet = deterministicPublicKey(55);
+
+    const provider = new InMemoryRecordProvider();
+    const resolver = new DomaForwardResolver({
+      provider,
+      domaClassAddress,
+      defaultChainCaip2: DEFAULT_SOLANA_CAIP2,
+    });
+
+    const seed = namehash('blog.alice.sol');
+    const [recordPda] = await findRecordPda(domaClassAddress, seed);
+    provider.put(
+      recordPda,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed,
+        data: serializeResolutionTuples([
+          ['WALLET', `${DEFAULT_SOLANA_CAIP2}:${wallet}`],
+          ['URL', 'https://blog.alice.example'],
+        ]),
+      })
+    );
+
+    expect(await resolver.resolve('blog.alice.sol')).to.equal(wallet);
+    expect(await resolver.resolveRecord('blog.alice.sol', 'URL')).to.equal(
+      'https://blog.alice.example'
+    );
+  });
 });
 
 describe('SrsReverseResolver', () => {
@@ -396,6 +468,69 @@ describe('SrsReverseResolver', () => {
     expect(results).to.deep.equal(['alice.sol', 'bob.sol']);
   });
 
+  it('reverseResolveAll returns all verified names for a wallet', async () => {
+    const domaClassAddress = deterministicPublicKey(65);
+    const reverseClassAddress = deterministicPublicKey(66);
+    const ownerAddress = deterministicPublicKey(67);
+    const wallet = deterministicPublicKey(68);
+
+    const provider = new InMemoryRecordProvider();
+    const forwardResolver = new DomaForwardResolver({
+      provider,
+      domaClassAddress,
+    });
+    const reverseResolver = new SrsReverseResolver({
+      provider,
+      reverseClassAddress,
+      forwardVerifier: forwardResolver,
+      verifyReverseWithForward: true,
+    });
+
+    const nameA = 'alpha.sol';
+    const nameB = 'beta.sol';
+
+    const [forwardPdaA] = await findRecordPda(domaClassAddress, namehash(nameA));
+    provider.put(
+      forwardPdaA,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed: namehash(nameA),
+        data: serializeResolutionTuples([['WALLET', wallet]]),
+      })
+    );
+
+    const [forwardPdaB] = await findRecordPda(domaClassAddress, namehash(nameB));
+    provider.put(
+      forwardPdaB,
+      buildSrsRecordAccount({
+        classAddress: domaClassAddress,
+        ownerAddress,
+        seed: namehash(nameB),
+        data: serializeResolutionTuples([['WALLET', deterministicPublicKey(69)]]),
+      })
+    );
+
+    const reverseSeed = reverseRecordSeed(wallet);
+    const [reversePda] = await findRecordPda(reverseClassAddress, reverseSeed);
+    provider.put(
+      reversePda,
+      buildSrsRecordAccount({
+        classAddress: reverseClassAddress,
+        ownerAddress,
+        seed: reverseSeed,
+        data: serializeResolutionTuples([
+          ['NAME', nameA],
+          ['NAME', nameB],
+          ['NAME', 'ALPHA.sol'],
+        ]),
+      })
+    );
+
+    const names = await reverseResolver.reverseResolveAll(wallet);
+    expect(names).to.deep.equal(['alpha.sol', 'alpha.sol']);
+  });
+
   it('reverse resolves from standalone reverse class without forward dependency when verification disabled', async () => {
     const reverseClassAddress = deterministicPublicKey(71);
     const ownerAddress = deterministicPublicKey(72);
@@ -423,6 +558,50 @@ describe('SrsReverseResolver', () => {
 
     const resolved = await reverseResolver.reverseResolve(wallet);
     expect(resolved).to.equal('standalone.sol');
+  });
+
+  it('batchReverseResolveAll returns all names in wallet order', async () => {
+    const reverseClassAddress = deterministicPublicKey(74);
+    const ownerAddress = deterministicPublicKey(75);
+    const walletA = deterministicPublicKey(76);
+    const walletB = deterministicPublicKey(77);
+
+    const provider = new InMemoryRecordProvider();
+    const reverseResolver = new SrsReverseResolver({
+      provider,
+      reverseClassAddress,
+      verifyReverseWithForward: false,
+    });
+
+    const reverseSeedA = reverseRecordSeed(walletA);
+    const [reversePdaA] = await findRecordPda(reverseClassAddress, reverseSeedA);
+    provider.put(
+      reversePdaA,
+      buildSrsRecordAccount({
+        classAddress: reverseClassAddress,
+        ownerAddress,
+        seed: reverseSeedA,
+        data: serializeResolutionTuples([
+          ['NAME', 'a1.sol'],
+          ['NAME', 'a2.sol'],
+        ]),
+      })
+    );
+
+    const reverseSeedB = reverseRecordSeed(walletB);
+    const [reversePdaB] = await findRecordPda(reverseClassAddress, reverseSeedB);
+    provider.put(
+      reversePdaB,
+      buildSrsRecordAccount({
+        classAddress: reverseClassAddress,
+        ownerAddress,
+        seed: reverseSeedB,
+        data: serializeResolutionTuples([['NAME', 'b1.sol']]),
+      })
+    );
+
+    const names = await reverseResolver.batchReverseResolveAll([walletA, walletB]);
+    expect(names).to.deep.equal([['a1.sol', 'a2.sol'], ['b1.sol']]);
   });
 });
 
@@ -566,5 +745,122 @@ describe('function-based API', () => {
       wallets: [walletA, walletB],
     });
     expect(batch).to.deep.equal([nameA, nameB]);
+  });
+
+  it('resolveRecord() and resolveRecords() resolve text-record tuples', async () => {
+    const provider = new InMemoryRecordProvider();
+    const ownerAddress = deterministicPublicKey(130);
+
+    const seed = namehash('records.sol');
+    const [forwardPda] = await findRecordPda(SRS_DEFAULT_DOMA_CLASS_ADDRESS, seed);
+    provider.put(
+      forwardPda,
+      buildSrsRecordAccount({
+        classAddress: SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+        ownerAddress,
+        seed,
+        data: serializeResolutionTuples([
+          ['URL', 'https://one.example'],
+          ['URL', 'https://two.example'],
+          ['TWITTER', '@records'],
+        ]),
+      })
+    );
+
+    const latestUrl = await resolveRecord({
+      provider,
+      name: 'records.sol',
+      recordKey: 'url',
+    });
+    expect(latestUrl).to.equal('https://two.example');
+
+    const urls = await resolveRecords({
+      provider,
+      name: 'records.sol',
+      recordKey: 'URL',
+    });
+    expect(urls).to.deep.equal(['https://one.example', 'https://two.example']);
+  });
+
+  it('reverseResolveAll() and batchReverseResolveAll() enumerate names', async () => {
+    const provider = new InMemoryRecordProvider();
+    const ownerAddress = deterministicPublicKey(140);
+    const walletA = deterministicPublicKey(141);
+    const walletB = deterministicPublicKey(142);
+    const nameA = 'enum-a.sol';
+    const nameB = 'enum-b.sol';
+
+    const [forwardPdaA] = await findRecordPda(
+      SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+      namehash(nameA)
+    );
+    provider.put(
+      forwardPdaA,
+      buildSrsRecordAccount({
+        classAddress: SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+        ownerAddress,
+        seed: namehash(nameA),
+        data: serializeResolutionTuples([['WALLET', walletA]]),
+      })
+    );
+
+    const [forwardPdaB] = await findRecordPda(
+      SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+      namehash(nameB)
+    );
+    provider.put(
+      forwardPdaB,
+      buildSrsRecordAccount({
+        classAddress: SRS_DEFAULT_DOMA_CLASS_ADDRESS,
+        ownerAddress,
+        seed: namehash(nameB),
+        data: serializeResolutionTuples([['WALLET', walletB]]),
+      })
+    );
+
+    const reverseSeedA = reverseRecordSeed(walletA);
+    const [reversePdaA] = await findRecordPda(
+      SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+      reverseSeedA
+    );
+    provider.put(
+      reversePdaA,
+      buildSrsRecordAccount({
+        classAddress: SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+        ownerAddress,
+        seed: reverseSeedA,
+        data: serializeResolutionTuples([
+          ['NAME', nameA],
+          ['NAME', 'not-matching.sol'],
+        ]),
+      })
+    );
+
+    const reverseSeedB = reverseRecordSeed(walletB);
+    const [reversePdaB] = await findRecordPda(
+      SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+      reverseSeedB
+    );
+    provider.put(
+      reversePdaB,
+      buildSrsRecordAccount({
+        classAddress: SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
+        ownerAddress,
+        seed: reverseSeedB,
+        data: serializeResolutionTuples([['NAME', nameB]]),
+      })
+    );
+
+    const namesA = await reverseResolveAll({
+      provider,
+      wallet: walletA,
+    });
+    expect(namesA).to.deep.equal([nameA]);
+
+    const all = await batchReverseResolveAll({
+      provider,
+      wallets: [walletA, walletB],
+    });
+    expect(all).to.deep.equal([[nameA], [nameB]]);
   });
 });
