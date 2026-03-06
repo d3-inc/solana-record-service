@@ -1,32 +1,17 @@
 export {
-  DomaForwardResolver,
-  type DomaForwardResolverConfig,
-} from './forwardResolver';
-export {
-  SrsReverseResolver,
-  type ForwardNameResolver,
-  type SrsReverseResolverConfig,
-} from './reverseResolver';
-export {
   resolve,
   resolveRecord,
   resolveRecords,
-  reverseResolve,
-  reverseResolveAll,
-  batchReverseResolve,
-  batchReverseResolveAll,
   type ResolveInput,
-  type ResolveRecordInput,
-  type ResolveRecordsInput,
-  type ReverseResolveInput,
-  type ReverseResolveAllInput,
-  type BatchReverseResolveInput,
-  type BatchReverseResolveAllInput,
-} from './resolver';
+  type ResolveTextRecordInput,
+} from './resolve';
 export {
-  createRpcRecordAccountProvider,
-  type RecordAccountProvider,
-} from './provider';
+  reverseResolve,
+  batchReverseResolve,
+  type ReverseResolveInput,
+  type ReverseResolveOptions,
+  type BatchReverseResolveInput,
+} from './reverseResolve';
 
 export {
   serializeResolutionTuples,
@@ -34,14 +19,14 @@ export {
   type ResolutionTuple,
 } from './tupleCodec';
 
-export { decodeSrsRecord, type DecodedSrsRecord } from './recordDecoder';
 export { namehash, normalizeName } from './namehash';
-export { findRecordPda, reverseRecordSeed } from './pda';
+export { findRecordPda, reverseRecordSeed, type PdaContext } from './pda';
 export {
   parseWalletTuple,
   normalizeChainCaip2,
   type ParsedWalletValue,
 } from './caip';
+export { type ResolutionContext, type ResolutionOptions } from './shared';
 export {
   ResolutionCodecError,
   ResolutionInputError,

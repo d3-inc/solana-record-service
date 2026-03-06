@@ -1,8 +1,5 @@
-import { PublicKey, publicKey, publicKeyBytes } from '@metaplex-foundation/umi';
-import {
-  getRecordAccountDataSerializer,
-  type Record,
-} from '../src/accounts';
+import { PublicKey, publicKey } from '@metaplex-foundation/umi';
+import { getRecordAccountDataSerializer } from '../src/accounts';
 
 export function deterministicPublicKey(seedByte: number): PublicKey {
   const bytes = new Uint8Array(32);
@@ -38,24 +35,4 @@ export function buildSrsRecordAccountData(
     seed: options.seed,
     data: options.data,
   });
-}
-
-export function buildSrsRecordAccount(options: BuildSrsRecordOptions): Record {
-  return {
-    publicKey: deterministicPublicKey(255),
-    header: {
-      executable: false,
-      lamports: { basisPoints: 0n, identifier: 'SOL', decimals: 9 },
-      owner: deterministicPublicKey(254),
-      rentEpoch: 0n,
-    },
-    discriminator: 2,
-    class: options.classAddress,
-    ownerType: options.ownerType ?? 0,
-    owner: options.ownerAddress,
-    isFrozen: options.isFrozen ?? false,
-    expiry: options.expiry ?? 0n,
-    seed: options.seed,
-    data: options.data,
-  };
 }

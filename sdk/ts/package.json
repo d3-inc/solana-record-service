@@ -34,7 +34,6 @@
   "dependencies": {
     "@noble/hashes": "^1.8.0",
     "@metaplex-foundation/umi": "^1.2.0",
-    "@solana/kit": "^2.1.0",
     "bn.js": "^5.2.1",
     "borsh": "^2.0.0",
     "borsher": "^4.0.0",

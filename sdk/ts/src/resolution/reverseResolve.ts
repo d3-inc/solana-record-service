@@ -1,0 +1,81 @@
+import { normalizeName } from './namehash';
+import {
+  fetchReverseTuples,
+  getDefaultChainCaip2,
+  normalizeWalletAddress,
+  type ResolutionContext,
+  type ResolutionOptions,
+} from './shared';
+import { resolve } from './resolve';
+
+export interface ReverseResolveInput {
+  wallet: string;
+}
+
+export interface ReverseResolveOptions extends ResolutionOptions {
+  verifyReverseWithForward?: boolean;
+}
+
+export interface BatchReverseResolveInput {
+  wallets: readonly string[];
+}
+
+export async function reverseResolve(
+  context: ResolutionContext,
+  input: ReverseResolveInput,
+  options?: ReverseResolveOptions
+): Promise<string | null> {
+  const normalizedWallet = normalizeWalletAddress(input.wallet);
+  const tuples = await fetchReverseTuples(context, normalizedWallet, options);
+  if (!tuples) {
+    return null;
+  }
+
+  let selectedName: string | null = null;
+  for (const [key, value] of tuples) {
+    if (key.trim().toUpperCase() !== 'NAME') {
+      continue;
+    }
+
+    const candidate = value.trim();
+    if (candidate.length > 0) {
+      selectedName = normalizeName(candidate);
+    }
+  }
+
+  if (!selectedName) {
+    return null;
+  }
+
+  const verifyReverseWithForward = options?.verifyReverseWithForward ?? true;
+  if (!verifyReverseWithForward) {
+    return selectedName;
+  }
+
+  const resolvedWallet = await resolve(
+    context,
+    {
+      name: selectedName,
+      chainCaip2: getDefaultChainCaip2(options),
+    },
+    options
+  );
+
+  if (!resolvedWallet) {
+    return null;
+  }
+
+  return normalizeWalletAddress(resolvedWallet) === normalizedWallet
+    ? selectedName
+    : null;
+}
+
+export async function batchReverseResolve(
+  context: ResolutionContext,
+  input: BatchReverseResolveInput,
+  options?: ReverseResolveOptions
+): Promise<Array<string | null>> {
+  return Promise.all(
+    input.wallets.map((wallet) => reverseResolve(context, { wallet }, options))
+  );
+}

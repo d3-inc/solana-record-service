@@ -24,6 +24,9 @@ function readU16(view: DataView, offset: number): number {
   return view.getUint16(offset, true);
 }
 
+// Resolution tuples are stored inside `record.data` using the SRS tuple payload
+// layout: [u8 version][u16 count][u16 keyLen][key][u16 valueLen][value]...
+// This is a protocol-level wire format, independent from account-level serializers.
 export function serializeResolutionTuples(
   tuples: readonly ResolutionTuple[]
 ): Uint8Array {
