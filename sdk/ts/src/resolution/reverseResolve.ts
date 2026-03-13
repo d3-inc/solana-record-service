@@ -7,6 +7,7 @@ import {
   type ResolutionOptions,
 } from './shared';
 import { resolve } from './resolve';
+import { publicKeyBytes } from '@metaplex-foundation/umi';
 
 export interface ReverseResolveInput {
   wallet: string;
@@ -70,12 +71,33 @@ export async function reverseResolve(
     : null;
 }
 
-export async function batchReverseResolve(
+
+function reverseRecordSeed(wallet: string): Uint8Array {
+  return publicKeyBytes(wallet);
+}
+
+export async function fetchReverseTuples(
   context: ResolutionContext,
-  input: BatchReverseResolveInput,
-  options?: ReverseResolveOptions
-): Promise<Array<string | null>> {
-  return Promise.all(
-    input.wallets.map((wallet) => reverseResolve(context, { wallet }, options))
+  wallet: string,
+  options?: ResolutionOptions
+): Promise<ResolutionTuple[] | null> {
+  const seed = reverseRecordSeed(wallet);
+  const [recordPda] = findRecordPda(
+    getPdaContext(context),
+    getReverseClassAddress(options),
+    seed,
+    getProgramId(context, options)
   );
+
+  const record = await safeFetchRecord(
+    context,
+    recordPda,
+    options?.rpcGetAccountOptions
+  );
+
+  return record ? parseResolutionTuples(record.data) : null;
+}
+
+export function normalizeWalletAddress(wallet: string): string {
+  return publicKey(wallet);
 }

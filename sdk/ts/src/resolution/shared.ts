@@ -1,107 +1,112 @@
+import { keccak_256 } from '@noble/hashes/sha3';
 import {
-  Context,
-  PublicKey,
-  RpcGetAccountOptions,
-  publicKey,
-} from '@metaplex-foundation/umi';
-import { safeFetchRecord } from '../accounts';
-import { getSolanaRecordServiceProgramId } from '../programs';
-import {
-  DEFAULT_SOLANA_CAIP2,
-  SRS_DEFAULT_DOMA_CLASS_ADDRESS,
-  SRS_DEFAULT_REVERSE_CLASS_ADDRESS,
-} from './constants';
-import { ResolutionInputError } from './errors';
-import { namehash } from './namehash';
-import { findRecordPda, reverseRecordSeed } from './pda';
-import { parseResolutionTuples, type ResolutionTuple } from './tupleCodec';
-import { normalizeChainCaip2 } from './caip';
+  addCodecSizePrefix,
+  getArrayCodec,
+  getTupleCodec,
+  getU32Codec,
+  getUtf8Codec,
+  transformCodec,
+} from '@solana/kit';
 
-export type ResolutionContext = Pick<Context, 'rpc' | 'programs'>;
-type PdaContext = ResolutionContext & Pick<Context, 'eddsa'>;
+import { ResolutionInputError, SrsRecordDecodeError } from './errors';
 
-export interface ResolutionOptions {
-  domaClassAddress?: PublicKey;
-  reverseClassAddress?: PublicKey;
-  programId?: PublicKey;
-  defaultChainCaip2?: string;
-  rpcGetAccountOptions?: RpcGetAccountOptions;
-}
+const CAIP2_PATTERN = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/;
+const CAIP10_PATTERN = /^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}:[-.%a-zA-Z0-9]{1,128}$/;
 
-function getPdaContext(context: ResolutionContext): PdaContext {
-  const withEddsa = context as Partial<PdaContext>;
-  if (!withEddsa.eddsa) {
-    throw new ResolutionInputError(
-      'context.eddsa is required to derive SRS PDAs'
-    );
+export function validateAndNormalizeCAIP2(caip2: string): string {
+  const trimmed = caip2.trim();
+  if (!CAIP2_PATTERN.test(trimmed)) {
+    throw new ResolutionInputError(`Invalid CAIP-2: ${caip2}`);
   }
 
-  return withEddsa as PdaContext;
+  return trimmed;
 }
 
-export function getProgramId(
-  context: ResolutionContext,
-  options?: ResolutionOptions
-): PublicKey {
-  return options?.programId ?? getSolanaRecordServiceProgramId(context);
+export function validateAndNormalizeCAIP10(caip10: string): string {
+  const trimmed = caip10.trim();
+  if (!CAIP10_PATTERN.test(trimmed)) {
+    throw new ResolutionInputError(`Invalid CAIP-10: ${caip10}`);
+  }
+
+  return trimmed;
 }
 
-export function getDomaClassAddress(options?: ResolutionOptions): PublicKey {
-  return options?.domaClassAddress ?? SRS_DEFAULT_DOMA_CLASS_ADDRESS;
+export function normalizeName(name: string): string {
+  const trimmed = name.trim();
+  if (trimmed.length === 0) {
+    throw new ResolutionInputError('Name cannot be empty');
+  }
+
+  // Loaded dynamically, as it's an optional peer dependency
+  const tr46 = require('tr46');
+
+  const asciiName = tr46.toASCII(trimmed, {
+    checkBidi: true,
+    checkHyphens: true,
+    useSTD3ASCIIRules: true,
+    verifyDNSLength: true,
+    transitionalProcessing: false,
+  });
+
+  if (!asciiName) {
+    throw new ResolutionInputError(`Invalid name: ${name}`);
+  }
+
+  return asciiName;
 }
 
-export function getReverseClassAddress(options?: ResolutionOptions): PublicKey {
-  return options?.reverseClassAddress ?? SRS_DEFAULT_REVERSE_CLASS_ADDRESS;
+export function namehash(name: string): Uint8Array {
+  const normalized = normalizeName(name);
+
+  const labels = normalized.split('.').filter((label) => label.length > 0);
+  let node = new Uint8Array(32);
+
+  const textEncoder = new TextEncoder();
+
+  for (let i = labels.length - 1; i >= 0; i -= 1) {
+    const labelBytes = textEncoder.encode(labels[i]);
+    const labelHash = Uint8Array.from(keccak_256(labelBytes));
+    node = Uint8Array.from(keccak_256(concat32(node, labelHash)));
+  }
+
+  return node;
 }
 
-export function getDefaultChainCaip2(options?: ResolutionOptions): string {
-  return normalizeChainCaip2(options?.defaultChainCaip2 ?? DEFAULT_SOLANA_CAIP2);
+function concat32(left: Uint8Array, right: Uint8Array): Uint8Array {
+  const out = new Uint8Array(64);
+  out.set(left, 0);
+  out.set(right, 32);
+  return out;
 }
 
-export async function fetchForwardTuples(
-  context: ResolutionContext,
-  name: string,
-  options?: ResolutionOptions
-): Promise<ResolutionTuple[] | null> {
-  const tokenId = namehash(name);
-  const [recordPda] = findRecordPda(
-    getPdaContext(context),
-    getDomaClassAddress(options),
-    tokenId,
-    getProgramId(context, options)
-  );
+export type Tuples = Array<readonly [string, string]>;
 
-  const record = await safeFetchRecord(
-    context,
-    recordPda,
-    options?.rpcGetAccountOptions
-  );
-
-  return record ? parseResolutionTuples(record.data) : null;
+export function serializeRecordData(
+  data: Tuples,
+): Uint8Array {
+  return Uint8Array.from(getRecordDataCodec().encode(data));
 }
 
-export async function fetchReverseTuples(
-  context: ResolutionContext,
-  wallet: string,
-  options?: ResolutionOptions
-): Promise<ResolutionTuple[] | null> {
-  const seed = reverseRecordSeed(wallet);
-  const [recordPda] = findRecordPda(
-    getPdaContext(context),
-    getReverseClassAddress(options),
-    seed,
-    getProgramId(context, options)
-  );
-
-  const record = await safeFetchRecord(
-    context,
-    recordPda,
-    options?.rpcGetAccountOptions
-  );
-
-  return record ? parseResolutionTuples(record.data) : null;
+export function deserializeRecordData(
+  data: Uint8Array,
+): Tuples {
+  try {
+    return getRecordDataCodec().decode(data);
+  } catch (error) {
+    throw new SrsRecordDecodeError('Failed to decode SRS record data', error);
+  }
 }
 
-export function normalizeWalletAddress(wallet: string): string {
-  return publicKey(wallet);
+// Borsh: u32 LE length prefix + UTF-8 bytes
+function getBorshStringCodec() {
+  return addCodecSizePrefix(getUtf8Codec(), getU32Codec());
 }
+
+// Borsh layout: u32 (outer array len) -> u32 (entry count) -> [u32+key, u32+value]*
+function getRecordDataCodec() {
+  const s = getBorshStringCodec();
+  const kvPairCodec = getTupleCodec([s, s] as const);
+  const mapEntriesCodec = getArrayCodec(kvPairCodec);
+  return mapEntriesCodec;
+}
+

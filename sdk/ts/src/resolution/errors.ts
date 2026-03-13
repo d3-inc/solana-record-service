@@ -13,7 +13,7 @@ export class ResolutionInputError extends Error {
 }
 
 export class SrsRecordDecodeError extends Error {
-  constructor(message: string) {
+  constructor(message: string, public readonly cause?: unknown) {
     super(message);
     this.name = 'SrsRecordDecodeError';
   }
