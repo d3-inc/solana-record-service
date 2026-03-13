@@ -16,7 +16,6 @@ export type ReverseResolveOptions = {
    forwardClassAddress?: PublicKey;
 } & RpcGetAccountOptions;
 
-
 export async function reverseResolve(
   context: Pick<Context, 'rpc' | 'programs' | 'eddsa'>,
   wallet: PublicKey,
@@ -91,8 +90,8 @@ async function verifyWithForwardResolution(
 function findReverseRecord(
   tuples: Tuples,
 ): string | null {
-  for(const [key, value] of tuples) {
-    if(key !== 'NAME') {
+  for (const [key, value] of tuples) {
+    if (key !== 'NAME') {
       continue;
     }
 

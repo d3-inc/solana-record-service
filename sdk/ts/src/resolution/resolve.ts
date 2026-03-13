@@ -63,13 +63,13 @@ function findWalletRecord(
   tuples: Tuples,
   caip2: string,
 ): string | null {
-  for(const [key, value] of tuples) {
-    if(key !== 'WALLET') {
+  for (const [key, value] of tuples) {
+    if (key !== 'WALLET') {
       continue;
     }
 
     const parsed = parseCaip10WalletValue(value);
-    if(parsed?.caip2 === caip2) {
+    if (parsed?.caip2 === caip2) {
       return parsed.walletAddress;
     }
   }
