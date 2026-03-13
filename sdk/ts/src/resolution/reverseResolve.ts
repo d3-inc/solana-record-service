@@ -1,103 +1,103 @@
-import { normalizeName } from './namehash';
-import {
-  fetchReverseTuples,
-  getDefaultChainCaip2,
-  normalizeWalletAddress,
-  type ResolutionContext,
-  type ResolutionOptions,
-} from './shared';
-import { resolve } from './resolve';
-import { publicKeyBytes } from '@metaplex-foundation/umi';
+import { Context, publicKey, PublicKey, publicKeyBytes, RpcGetAccountOptions } from '@metaplex-foundation/umi';
 
-export interface ReverseResolveInput {
-  wallet: string;
-}
+import { DEFAULT_SOLANA_CAIP2, resolve } from './resolve';
+import { deserializeRecordData, findRecordPda, normalizeName, Tuples } from './shared';
+import { ResolutionInputError } from './errors';
+import { safeFetchRecord } from '../accounts';
 
-export interface ReverseResolveOptions extends ResolutionOptions {
-  verifyReverseWithForward?: boolean;
-}
+// TODO: create actual reverse class
+export const DEFAULT_REVERSE_RESOLUTION_CLASS_ADDRESS: PublicKey = publicKey(
+  'CCcpHtBokXDR9PimwAKsxyspDoVtXxXjAJTBSsC1jHYY'
+);
 
-export interface BatchReverseResolveInput {
-  wallets: readonly string[];
-}
+export type ReverseResolveOptions = {
+   classAddress?: PublicKey;
+   verifyReverseWithForward?: boolean;
+   forwardClassAddress?: PublicKey;
+} & RpcGetAccountOptions;
+
 
 export async function reverseResolve(
-  context: ResolutionContext,
-  input: ReverseResolveInput,
+  context: Pick<Context, 'rpc' | 'programs' | 'eddsa'>,
+  wallet: PublicKey,
   options?: ReverseResolveOptions
 ): Promise<string | null> {
-  const normalizedWallet = normalizeWalletAddress(input.wallet);
-  const tuples = await fetchReverseTuples(context, normalizedWallet, options);
-  if (!tuples) {
-    return null;
-  }
-
-  let selectedName: string | null = null;
-  for (const [key, value] of tuples) {
-    if (key.trim().toUpperCase() !== 'NAME') {
-      continue;
-    }
-
-    const candidate = value.trim();
-    if (candidate.length > 0) {
-      selectedName = normalizeName(candidate);
-    }
-  }
-
-  if (!selectedName) {
-    return null;
-  }
-
-  const verifyReverseWithForward = options?.verifyReverseWithForward ?? true;
-  if (!verifyReverseWithForward) {
-    return selectedName;
-  }
-
-  const resolvedWallet = await resolve(
-    context,
-    {
-      name: selectedName,
-      chainCaip2: getDefaultChainCaip2(options),
-    },
-    options
-  );
-
-  if (!resolvedWallet) {
-    return null;
-  }
-
-  return normalizeWalletAddress(resolvedWallet) === normalizedWallet
-    ? selectedName
-    : null;
-}
-
-
-function reverseRecordSeed(wallet: string): Uint8Array {
-  return publicKeyBytes(wallet);
-}
-
-export async function fetchReverseTuples(
-  context: ResolutionContext,
-  wallet: string,
-  options?: ResolutionOptions
-): Promise<ResolutionTuple[] | null> {
-  const seed = reverseRecordSeed(wallet);
+  const seed = publicKeyBytes(wallet);
+  const resolutionClassAddress = options?.classAddress ?? DEFAULT_REVERSE_RESOLUTION_CLASS_ADDRESS;
   const [recordPda] = findRecordPda(
-    getPdaContext(context),
-    getReverseClassAddress(options),
+    context,
+    resolutionClassAddress,
     seed,
-    getProgramId(context, options)
   );
 
   const record = await safeFetchRecord(
     context,
     recordPda,
-    options?.rpcGetAccountOptions
+    options
+  );
+  if (!record) {
+    throw new ResolutionInputError(`No SRS record found for wallet: ${wallet}`);
+  }
+
+  const tuples = await deserializeRecordData(record?.data);
+  if (!tuples?.length) {
+    return null;
+  }
+
+  const name = findReverseRecord(tuples);
+  if (!name) {
+    return null;
+  }
+
+  const verifyReverseWithForward = options?.verifyReverseWithForward ?? true;
+  if (!verifyReverseWithForward) {
+    return name;
+  }
+
+  const isForwardResolutionMatch = await verifyWithForwardResolution(
+    name,
+    context,
+    wallet,
+    options
   );
 
-  return record ? parseResolutionTuples(record.data) : null;
+  return isForwardResolutionMatch ? name : null;
 }
 
-export function normalizeWalletAddress(wallet: string): string {
-  return publicKey(wallet);
+async function verifyWithForwardResolution(
+  name: string,
+  context: Pick<Context, 'rpc' | 'programs' | 'eddsa'>,
+  wallet: PublicKey,
+  options?: ReverseResolveOptions,
+): Promise<boolean> {
+  const resolvedWallet = await resolve(
+    context,
+    name,
+    {
+      ...options,
+      classAddress: options?.forwardClassAddress,
+      chainCaip2: DEFAULT_SOLANA_CAIP2,
+    }
+  );
+
+  if (!resolvedWallet) {
+    return false;
+  }
+
+  const isForwardResolutionMatch = publicKey(resolvedWallet) === wallet;
+  return isForwardResolutionMatch;
+}
+
+function findReverseRecord(
+  tuples: Tuples,
+): string | null {
+  for(const [key, value] of tuples) {
+    if(key !== 'NAME') {
+      continue;
+    }
+
+    return normalizeName(value);
+  }
+
+  return null;
 }

@@ -5,8 +5,10 @@ import {
   getTupleCodec,
   getU32Codec,
   getUtf8Codec,
-  transformCodec,
 } from '@solana/kit';
+import { Context, PublicKey, publicKeyBytes } from '@metaplex-foundation/umi';
+
+import { SOLANA_RECORD_SERVICE_PROGRAM_ID } from '../programs';
 
 import { ResolutionInputError, SrsRecordDecodeError } from './errors';
 
@@ -72,12 +74,27 @@ export function namehash(name: string): Uint8Array {
   return node;
 }
 
-function concat32(left: Uint8Array, right: Uint8Array): Uint8Array {
-  const out = new Uint8Array(64);
-  out.set(left, 0);
-  out.set(right, 32);
-  return out;
+export function findRecordPda(
+  context: Pick<Context, 'eddsa' | 'programs'>,
+  classAddress: PublicKey,
+  recordSeed: Uint8Array,
+): [PublicKey, number] {
+
+   const programId = context.programs.getPublicKey(
+    'solanaRecordService',
+    SOLANA_RECORD_SERVICE_PROGRAM_ID
+  );
+
+  const textEncoder = new TextEncoder();
+  const SRS_RECORD_PDA_SEED = textEncoder.encode('record');
+
+  return context.eddsa.findPda(programId, [
+    SRS_RECORD_PDA_SEED,
+    publicKeyBytes(classAddress),
+    recordSeed,
+  ]);
 }
+
 
 export type Tuples = Array<readonly [string, string]>;
 
@@ -110,3 +127,9 @@ function getRecordDataCodec() {
   return mapEntriesCodec;
 }
 
+function concat32(left: Uint8Array, right: Uint8Array): Uint8Array {
+  const out = new Uint8Array(64);
+  out.set(left, 0);
+  out.set(right, 32);
+  return out;
+}
