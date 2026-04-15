@@ -32,6 +32,6 @@ jobs:
         run: pnpm build
       - name: Publish client
         working-directory: sdk/ts
-        run: pnpm publish --no-git-checks
+        run: pnpm publish --no-git-checks --tag latest
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
