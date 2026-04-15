@@ -1,5 +1,5 @@
 {
-  "name": "@d3-inc/srs",
+  "name": "srs",
   "version": "1.0.0",
   "main": "index.js",
   "license": "MIT",

@@ -1,6 +1,6 @@
 {
-  "name": "srs-lib",
-  "version": "1.0.0",
+  "name": "@d3-inc/srs-lib",
+  "version": "1.0.0-doma.1",
   "repository": "git@github.com:solana-foundation/solana-record-service.git",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
