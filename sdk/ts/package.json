@@ -1,31 +1,51 @@
 {
-  "name": "srs-lib",
-  "version": "1.0.0",
+  "name": "@d3-inc/srs-lib",
+  "version": "1.0.0-doma.6",
   "repository": "git@github.com:solana-foundation/solana-record-service.git",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./resolution": {
+      "types": "./dist/resolution/index.d.ts",
+      "default": "./dist/resolution/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc -p tsconfig.build.json",
     "prepublishOnly": "pnpm run build",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "test": "mocha --require ts-node/register 'test/**/*'"
   },
   "devDependencies": {
-    "@types/chai": "^5.2.2",
+    "@metaplex-foundation/umi-bundle-defaults": "^1.5.1",
+    "@types/chai": "^4.3.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.11.24",
-    "chai": "^5.2.0",
+    "chai": "^4.4.1",
     "mocha": "^10.8.2",
+    "prettier": "^3.8.4",
     "ts-node": "^10.9.2",
     "typescript": "^5.0.0"
   },
   "dependencies": {
     "@metaplex-foundation/umi": "^1.2.0",
-    "@solana/kit": "^2.1.0",
-    "bn.js": "^5.2.1",
-    "borsh": "^2.0.0",
-    "borsher": "^4.0.0"
+    "@metaplex-foundation/umi-serializers": "^1.5.1",
+    "@noble/hashes": "^1.8.0"
+  },
+  "peerDependencies": {
+    "tr46": "6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "tr46": {
+      "optional": true
+    }
   }
 }
