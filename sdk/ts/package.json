@@ -4,6 +4,16 @@
   "repository": "git@github.com:solana-foundation/solana-record-service.git",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./resolution": {
+      "types": "./dist/resolution/index.d.ts",
+      "default": "./dist/resolution/index.js"
+    }
+  },
   "files": [
     "dist"
   ],
@@ -23,9 +33,15 @@
   },
   "dependencies": {
     "@metaplex-foundation/umi": "^1.2.0",
-    "@solana/kit": "^2.1.0",
-    "bn.js": "^5.2.1",
-    "borsh": "^2.0.0",
-    "borsher": "^4.0.0"
+    "@noble/hashes": "^1.8.0",
+    "@solana/kit": "^6.3.1"
+  },
+  "peerDependencies": {
+    "tr46": "6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "tr46": {
+      "optional": true
+    }
   }
 }
