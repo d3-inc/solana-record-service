@@ -12,66 +12,56 @@ use borsh::BorshSerialize;
 #[derive(Debug)]
 pub struct DeleteRecord {
     /// Record owner or class authority for permissioned classes
-    pub authority: solana_program::pubkey::Pubkey,
+    pub authority: solana_pubkey::Pubkey,
     /// Account that will get refunded for the record deletion
-    pub payer: solana_program::pubkey::Pubkey,
+    pub payer: solana_pubkey::Pubkey,
     /// Record account to be updated
-    pub record: solana_program::pubkey::Pubkey,
+    pub record: solana_pubkey::Pubkey,
     /// Class account of the record
-    pub class: Option<solana_program::pubkey::Pubkey>,
+    pub class: Option<solana_pubkey::Pubkey>,
     /// Token2022 Program used to close the mint account
-    pub token2022_program: Option<solana_program::pubkey::Pubkey>,
+    pub token2022_program: Option<solana_pubkey::Pubkey>,
     /// Mint account for the tokenized record
-    pub mint: Option<solana_program::pubkey::Pubkey>,
+    pub mint: Option<solana_pubkey::Pubkey>,
 }
 
 impl DeleteRecord {
-    pub fn instruction(&self) -> solana_program::instruction::Instruction {
+    pub fn instruction(&self) -> solana_instruction::Instruction {
         self.instruction_with_remaining_accounts(&[])
     }
     #[allow(clippy::arithmetic_side_effects)]
     #[allow(clippy::vec_init_then_push)]
     pub fn instruction_with_remaining_accounts(
         &self,
-        remaining_accounts: &[solana_program::instruction::AccountMeta],
-    ) -> solana_program::instruction::Instruction {
+        remaining_accounts: &[solana_instruction::AccountMeta],
+    ) -> solana_instruction::Instruction {
         let mut accounts = Vec::with_capacity(6 + remaining_accounts.len());
-        accounts.push(solana_program::instruction::AccountMeta::new(
-            self.authority,
-            true,
-        ));
-        accounts.push(solana_program::instruction::AccountMeta::new(
-            self.payer, true,
-        ));
-        accounts.push(solana_program::instruction::AccountMeta::new(
-            self.record,
-            false,
-        ));
+        accounts.push(solana_instruction::AccountMeta::new(self.authority, true));
+        accounts.push(solana_instruction::AccountMeta::new(self.payer, true));
+        accounts.push(solana_instruction::AccountMeta::new(self.record, false));
         if let Some(class) = self.class {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
-                class, false,
-            ));
+            accounts.push(solana_instruction::AccountMeta::new_readonly(class, false));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
         }
         if let Some(token2022_program) = self.token2022_program {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 token2022_program,
                 false,
             ));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
         }
         if let Some(mint) = self.mint {
-            accounts.push(solana_program::instruction::AccountMeta::new(mint, false));
+            accounts.push(solana_instruction::AccountMeta::new(mint, false));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
@@ -79,7 +69,7 @@ impl DeleteRecord {
         accounts.extend_from_slice(remaining_accounts);
         let data = borsh::to_vec(&DeleteRecordInstructionData::new()).unwrap();
 
-        solana_program::instruction::Instruction {
+        solana_instruction::Instruction {
             program_id: crate::SOLANA_RECORD_SERVICE_ID,
             accounts,
             data,
@@ -117,13 +107,13 @@ impl Default for DeleteRecordInstructionData {
 ///   5. `[writable, optional]` mint
 #[derive(Clone, Debug, Default)]
 pub struct DeleteRecordBuilder {
-    authority: Option<solana_program::pubkey::Pubkey>,
-    payer: Option<solana_program::pubkey::Pubkey>,
-    record: Option<solana_program::pubkey::Pubkey>,
-    class: Option<solana_program::pubkey::Pubkey>,
-    token2022_program: Option<solana_program::pubkey::Pubkey>,
-    mint: Option<solana_program::pubkey::Pubkey>,
-    __remaining_accounts: Vec<solana_program::instruction::AccountMeta>,
+    authority: Option<solana_pubkey::Pubkey>,
+    payer: Option<solana_pubkey::Pubkey>,
+    record: Option<solana_pubkey::Pubkey>,
+    class: Option<solana_pubkey::Pubkey>,
+    token2022_program: Option<solana_pubkey::Pubkey>,
+    mint: Option<solana_pubkey::Pubkey>,
+    __remaining_accounts: Vec<solana_instruction::AccountMeta>,
 }
 
 impl DeleteRecordBuilder {
@@ -132,26 +122,26 @@ impl DeleteRecordBuilder {
     }
     /// Record owner or class authority for permissioned classes
     #[inline(always)]
-    pub fn authority(&mut self, authority: solana_program::pubkey::Pubkey) -> &mut Self {
+    pub fn authority(&mut self, authority: solana_pubkey::Pubkey) -> &mut Self {
         self.authority = Some(authority);
         self
     }
     /// Account that will get refunded for the record deletion
     #[inline(always)]
-    pub fn payer(&mut self, payer: solana_program::pubkey::Pubkey) -> &mut Self {
+    pub fn payer(&mut self, payer: solana_pubkey::Pubkey) -> &mut Self {
         self.payer = Some(payer);
         self
     }
     /// Record account to be updated
     #[inline(always)]
-    pub fn record(&mut self, record: solana_program::pubkey::Pubkey) -> &mut Self {
+    pub fn record(&mut self, record: solana_pubkey::Pubkey) -> &mut Self {
         self.record = Some(record);
         self
     }
     /// `[optional account]`
     /// Class account of the record
     #[inline(always)]
-    pub fn class(&mut self, class: Option<solana_program::pubkey::Pubkey>) -> &mut Self {
+    pub fn class(&mut self, class: Option<solana_pubkey::Pubkey>) -> &mut Self {
         self.class = class;
         self
     }
@@ -160,7 +150,7 @@ impl DeleteRecordBuilder {
     #[inline(always)]
     pub fn token2022_program(
         &mut self,
-        token2022_program: Option<solana_program::pubkey::Pubkey>,
+        token2022_program: Option<solana_pubkey::Pubkey>,
     ) -> &mut Self {
         self.token2022_program = token2022_program;
         self
@@ -168,16 +158,13 @@ impl DeleteRecordBuilder {
     /// `[optional account]`
     /// Mint account for the tokenized record
     #[inline(always)]
-    pub fn mint(&mut self, mint: Option<solana_program::pubkey::Pubkey>) -> &mut Self {
+    pub fn mint(&mut self, mint: Option<solana_pubkey::Pubkey>) -> &mut Self {
         self.mint = mint;
         self
     }
     /// Add an additional account to the instruction.
     #[inline(always)]
-    pub fn add_remaining_account(
-        &mut self,
-        account: solana_program::instruction::AccountMeta,
-    ) -> &mut Self {
+    pub fn add_remaining_account(&mut self, account: solana_instruction::AccountMeta) -> &mut Self {
         self.__remaining_accounts.push(account);
         self
     }
@@ -185,13 +172,13 @@ impl DeleteRecordBuilder {
     #[inline(always)]
     pub fn add_remaining_accounts(
         &mut self,
-        accounts: &[solana_program::instruction::AccountMeta],
+        accounts: &[solana_instruction::AccountMeta],
     ) -> &mut Self {
         self.__remaining_accounts.extend_from_slice(accounts);
         self
     }
     #[allow(clippy::clone_on_copy)]
-    pub fn instruction(&self) -> solana_program::instruction::Instruction {
+    pub fn instruction(&self) -> solana_instruction::Instruction {
         let accounts = DeleteRecord {
             authority: self.authority.expect("authority is not set"),
             payer: self.payer.expect("payer is not set"),
@@ -208,40 +195,40 @@ impl DeleteRecordBuilder {
 /// `delete_record` CPI accounts.
 pub struct DeleteRecordCpiAccounts<'a, 'b> {
     /// Record owner or class authority for permissioned classes
-    pub authority: &'b solana_program::account_info::AccountInfo<'a>,
+    pub authority: &'b solana_account_info::AccountInfo<'a>,
     /// Account that will get refunded for the record deletion
-    pub payer: &'b solana_program::account_info::AccountInfo<'a>,
+    pub payer: &'b solana_account_info::AccountInfo<'a>,
     /// Record account to be updated
-    pub record: &'b solana_program::account_info::AccountInfo<'a>,
+    pub record: &'b solana_account_info::AccountInfo<'a>,
     /// Class account of the record
-    pub class: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub class: Option<&'b solana_account_info::AccountInfo<'a>>,
     /// Token2022 Program used to close the mint account
-    pub token2022_program: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub token2022_program: Option<&'b solana_account_info::AccountInfo<'a>>,
     /// Mint account for the tokenized record
-    pub mint: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub mint: Option<&'b solana_account_info::AccountInfo<'a>>,
 }
 
 /// `delete_record` CPI instruction.
 pub struct DeleteRecordCpi<'a, 'b> {
     /// The program to invoke.
-    pub __program: &'b solana_program::account_info::AccountInfo<'a>,
+    pub __program: &'b solana_account_info::AccountInfo<'a>,
     /// Record owner or class authority for permissioned classes
-    pub authority: &'b solana_program::account_info::AccountInfo<'a>,
+    pub authority: &'b solana_account_info::AccountInfo<'a>,
     /// Account that will get refunded for the record deletion
-    pub payer: &'b solana_program::account_info::AccountInfo<'a>,
+    pub payer: &'b solana_account_info::AccountInfo<'a>,
     /// Record account to be updated
-    pub record: &'b solana_program::account_info::AccountInfo<'a>,
+    pub record: &'b solana_account_info::AccountInfo<'a>,
     /// Class account of the record
-    pub class: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub class: Option<&'b solana_account_info::AccountInfo<'a>>,
     /// Token2022 Program used to close the mint account
-    pub token2022_program: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub token2022_program: Option<&'b solana_account_info::AccountInfo<'a>>,
     /// Mint account for the tokenized record
-    pub mint: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    pub mint: Option<&'b solana_account_info::AccountInfo<'a>>,
 }
 
 impl<'a, 'b> DeleteRecordCpi<'a, 'b> {
     pub fn new(
-        program: &'b solana_program::account_info::AccountInfo<'a>,
+        program: &'b solana_account_info::AccountInfo<'a>,
         accounts: DeleteRecordCpiAccounts<'a, 'b>,
     ) -> Self {
         Self {
@@ -255,25 +242,21 @@ impl<'a, 'b> DeleteRecordCpi<'a, 'b> {
         }
     }
     #[inline(always)]
-    pub fn invoke(&self) -> solana_program::entrypoint::ProgramResult {
+    pub fn invoke(&self) -> solana_program_entrypoint::ProgramResult {
         self.invoke_signed_with_remaining_accounts(&[], &[])
     }
     #[inline(always)]
     pub fn invoke_with_remaining_accounts(
         &self,
-        remaining_accounts: &[(
-            &'b solana_program::account_info::AccountInfo<'a>,
-            bool,
-            bool,
-        )],
-    ) -> solana_program::entrypoint::ProgramResult {
+        remaining_accounts: &[(&'b solana_account_info::AccountInfo<'a>, bool, bool)],
+    ) -> solana_program_entrypoint::ProgramResult {
         self.invoke_signed_with_remaining_accounts(&[], remaining_accounts)
     }
     #[inline(always)]
     pub fn invoke_signed(
         &self,
         signers_seeds: &[&[&[u8]]],
-    ) -> solana_program::entrypoint::ProgramResult {
+    ) -> solana_program_entrypoint::ProgramResult {
         self.invoke_signed_with_remaining_accounts(signers_seeds, &[])
     }
     #[allow(clippy::arithmetic_side_effects)]
@@ -282,58 +265,49 @@ impl<'a, 'b> DeleteRecordCpi<'a, 'b> {
     pub fn invoke_signed_with_remaining_accounts(
         &self,
         signers_seeds: &[&[&[u8]]],
-        remaining_accounts: &[(
-            &'b solana_program::account_info::AccountInfo<'a>,
-            bool,
-            bool,
-        )],
-    ) -> solana_program::entrypoint::ProgramResult {
+        remaining_accounts: &[(&'b solana_account_info::AccountInfo<'a>, bool, bool)],
+    ) -> solana_program_entrypoint::ProgramResult {
         let mut accounts = Vec::with_capacity(6 + remaining_accounts.len());
-        accounts.push(solana_program::instruction::AccountMeta::new(
+        accounts.push(solana_instruction::AccountMeta::new(
             *self.authority.key,
             true,
         ));
-        accounts.push(solana_program::instruction::AccountMeta::new(
-            *self.payer.key,
-            true,
-        ));
-        accounts.push(solana_program::instruction::AccountMeta::new(
+        accounts.push(solana_instruction::AccountMeta::new(*self.payer.key, true));
+        accounts.push(solana_instruction::AccountMeta::new(
             *self.record.key,
             false,
         ));
         if let Some(class) = self.class {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 *class.key, false,
             ));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
         }
         if let Some(token2022_program) = self.token2022_program {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 *token2022_program.key,
                 false,
             ));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
         }
         if let Some(mint) = self.mint {
-            accounts.push(solana_program::instruction::AccountMeta::new(
-                *mint.key, false,
-            ));
+            accounts.push(solana_instruction::AccountMeta::new(*mint.key, false));
         } else {
-            accounts.push(solana_program::instruction::AccountMeta::new_readonly(
+            accounts.push(solana_instruction::AccountMeta::new_readonly(
                 crate::SOLANA_RECORD_SERVICE_ID,
                 false,
             ));
         }
         remaining_accounts.iter().for_each(|remaining_account| {
-            accounts.push(solana_program::instruction::AccountMeta {
+            accounts.push(solana_instruction::AccountMeta {
                 pubkey: *remaining_account.0.key,
                 is_signer: remaining_account.1,
                 is_writable: remaining_account.2,
@@ -341,7 +315,7 @@ impl<'a, 'b> DeleteRecordCpi<'a, 'b> {
         });
         let data = borsh::to_vec(&DeleteRecordInstructionData::new()).unwrap();
 
-        let instruction = solana_program::instruction::Instruction {
+        let instruction = solana_instruction::Instruction {
             program_id: crate::SOLANA_RECORD_SERVICE_ID,
             accounts,
             data,
@@ -365,9 +339,9 @@ impl<'a, 'b> DeleteRecordCpi<'a, 'b> {
             .for_each(|remaining_account| account_infos.push(remaining_account.0.clone()));
 
         if signers_seeds.is_empty() {
-            solana_program::program::invoke(&instruction, &account_infos)
+            solana_cpi::invoke(&instruction, &account_infos)
         } else {
-            solana_program::program::invoke_signed(&instruction, &account_infos, signers_seeds)
+            solana_cpi::invoke_signed(&instruction, &account_infos, signers_seeds)
         }
     }
 }
@@ -388,7 +362,7 @@ pub struct DeleteRecordCpiBuilder<'a, 'b> {
 }
 
 impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
-    pub fn new(program: &'b solana_program::account_info::AccountInfo<'a>) -> Self {
+    pub fn new(program: &'b solana_account_info::AccountInfo<'a>) -> Self {
         let instruction = Box::new(DeleteRecordCpiBuilderInstruction {
             __program: program,
             authority: None,
@@ -403,35 +377,26 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     }
     /// Record owner or class authority for permissioned classes
     #[inline(always)]
-    pub fn authority(
-        &mut self,
-        authority: &'b solana_program::account_info::AccountInfo<'a>,
-    ) -> &mut Self {
+    pub fn authority(&mut self, authority: &'b solana_account_info::AccountInfo<'a>) -> &mut Self {
         self.instruction.authority = Some(authority);
         self
     }
     /// Account that will get refunded for the record deletion
     #[inline(always)]
-    pub fn payer(&mut self, payer: &'b solana_program::account_info::AccountInfo<'a>) -> &mut Self {
+    pub fn payer(&mut self, payer: &'b solana_account_info::AccountInfo<'a>) -> &mut Self {
         self.instruction.payer = Some(payer);
         self
     }
     /// Record account to be updated
     #[inline(always)]
-    pub fn record(
-        &mut self,
-        record: &'b solana_program::account_info::AccountInfo<'a>,
-    ) -> &mut Self {
+    pub fn record(&mut self, record: &'b solana_account_info::AccountInfo<'a>) -> &mut Self {
         self.instruction.record = Some(record);
         self
     }
     /// `[optional account]`
     /// Class account of the record
     #[inline(always)]
-    pub fn class(
-        &mut self,
-        class: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    ) -> &mut Self {
+    pub fn class(&mut self, class: Option<&'b solana_account_info::AccountInfo<'a>>) -> &mut Self {
         self.instruction.class = class;
         self
     }
@@ -440,7 +405,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     #[inline(always)]
     pub fn token2022_program(
         &mut self,
-        token2022_program: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+        token2022_program: Option<&'b solana_account_info::AccountInfo<'a>>,
     ) -> &mut Self {
         self.instruction.token2022_program = token2022_program;
         self
@@ -448,10 +413,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     /// `[optional account]`
     /// Mint account for the tokenized record
     #[inline(always)]
-    pub fn mint(
-        &mut self,
-        mint: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    ) -> &mut Self {
+    pub fn mint(&mut self, mint: Option<&'b solana_account_info::AccountInfo<'a>>) -> &mut Self {
         self.instruction.mint = mint;
         self
     }
@@ -459,7 +421,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     #[inline(always)]
     pub fn add_remaining_account(
         &mut self,
-        account: &'b solana_program::account_info::AccountInfo<'a>,
+        account: &'b solana_account_info::AccountInfo<'a>,
         is_writable: bool,
         is_signer: bool,
     ) -> &mut Self {
@@ -475,11 +437,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     #[inline(always)]
     pub fn add_remaining_accounts(
         &mut self,
-        accounts: &[(
-            &'b solana_program::account_info::AccountInfo<'a>,
-            bool,
-            bool,
-        )],
+        accounts: &[(&'b solana_account_info::AccountInfo<'a>, bool, bool)],
     ) -> &mut Self {
         self.instruction
             .__remaining_accounts
@@ -487,7 +445,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
         self
     }
     #[inline(always)]
-    pub fn invoke(&self) -> solana_program::entrypoint::ProgramResult {
+    pub fn invoke(&self) -> solana_program_entrypoint::ProgramResult {
         self.invoke_signed(&[])
     }
     #[allow(clippy::clone_on_copy)]
@@ -495,7 +453,7 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
     pub fn invoke_signed(
         &self,
         signers_seeds: &[&[&[u8]]],
-    ) -> solana_program::entrypoint::ProgramResult {
+    ) -> solana_program_entrypoint::ProgramResult {
         let instruction = DeleteRecordCpi {
             __program: self.instruction.__program,
 
@@ -520,17 +478,13 @@ impl<'a, 'b> DeleteRecordCpiBuilder<'a, 'b> {
 
 #[derive(Clone, Debug)]
 struct DeleteRecordCpiBuilderInstruction<'a, 'b> {
-    __program: &'b solana_program::account_info::AccountInfo<'a>,
-    authority: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    payer: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    record: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    class: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    token2022_program: Option<&'b solana_program::account_info::AccountInfo<'a>>,
-    mint: Option<&'b solana_program::account_info::AccountInfo<'a>>,
+    __program: &'b solana_account_info::AccountInfo<'a>,
+    authority: Option<&'b solana_account_info::AccountInfo<'a>>,
+    payer: Option<&'b solana_account_info::AccountInfo<'a>>,
+    record: Option<&'b solana_account_info::AccountInfo<'a>>,
+    class: Option<&'b solana_account_info::AccountInfo<'a>>,
+    token2022_program: Option<&'b solana_account_info::AccountInfo<'a>>,
+    mint: Option<&'b solana_account_info::AccountInfo<'a>>,
     /// Additional instruction accounts `(AccountInfo, is_writable, is_signer)`.
-    __remaining_accounts: Vec<(
-        &'b solana_program::account_info::AccountInfo<'a>,
-        bool,
-        bool,
-    )>,
+    __remaining_accounts: Vec<(&'b solana_account_info::AccountInfo<'a>, bool, bool)>,
 }

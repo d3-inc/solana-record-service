@@ -1,0 +1,37 @@
+name: NPM Publish
+on:
+  workflow_dispatch: {}
+
+jobs:
+  publish:
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+    env:
+      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v2
+        with:
+          version: 9.10.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+          cache: 'pnpm'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@d3-inc'
+      - name: Install root dependencies
+        run: pnpm install
+      - name: Install TypeScript client dependencies
+        working-directory: sdk/ts
+        run: pnpm install
+      - name: Build client
+        working-directory: sdk/ts
+        run: pnpm build
+      - name: Publish client
+        working-directory: sdk/ts
+        run: pnpm publish --no-git-checks
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
