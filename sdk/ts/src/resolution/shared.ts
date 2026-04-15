@@ -1,7 +1,7 @@
 import { keccak_256 } from '@noble/hashes/sha3';
 import { Context, PublicKey, publicKeyBytes } from '@metaplex-foundation/umi';
 
-import { SOLANA_RECORD_SERVICE_PROGRAM_ID } from '../programs';
+import { SOLANA_RECORD_SERVICE_PROGRAM_ID } from '../generated/programs';
 
 import { ResolutionInputError } from './errors';
 
@@ -77,8 +77,6 @@ export function findRecordPda(
     recordSeed,
   ]);
 }
-
-
 
 function concat32(left: Uint8Array, right: Uint8Array): Uint8Array {
   const out = new Uint8Array(64);

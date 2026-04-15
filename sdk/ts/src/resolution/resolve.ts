@@ -1,6 +1,6 @@
 import { Context, publicKey, PublicKey, RpcGetAccountOptions } from '@metaplex-foundation/umi';
 
-import { safeFetchRecord } from '../accounts';
+import { safeFetchRecord } from '../generated/accounts';
 
 import {
   findRecordPda,

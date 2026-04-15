@@ -9,7 +9,7 @@ import { Context, publicKey, PublicKey, publicKeyBytes, RpcGetAccountOptions } f
 import { DEFAULT_SOLANA_CAIP2, resolve } from './resolve';
 import { findRecordPda, normalizeName } from './shared';
 import { ResolutionInputError, SrsRecordDecodeError } from './errors';
-import { safeFetchRecord } from '../accounts';
+import { safeFetchRecord } from '../generated/accounts';
 
 export const DEFAULT_REVERSE_RESOLUTION_CLASS_ADDRESS: PublicKey = publicKey(
   'EM8obeyZaFKZ9T2kWZ1JZwRBUMmvJcX2r4YVF9ZLv2xQ'
