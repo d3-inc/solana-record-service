@@ -1,4 +1,4 @@
-name: NPM Publish
+name: GitHub Packages Publish (Forked)
 on:
   workflow_dispatch: {}
 
