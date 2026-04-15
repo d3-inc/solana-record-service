@@ -20,6 +20,28 @@ export const DEFAULT_RESOLUTION_CLASS_ADDRESS: PublicKey = publicKey(
 // https://standards.chainagnostic.org/CAIPs/caip-363
 export const DEFAULT_SOLANA_CAIP2 = 'solana:_';
 
+export const WALLET_RECORD_TYPE = 'WALLET';
+
+export type FindNamePDAOptions = {
+   classAddress?: PublicKey;
+};
+
+export function findNameRecordPDA(
+  context: Pick<Context, 'programs' | 'eddsa'>, 
+  name: string,
+  options?: FindNamePDAOptions
+): PublicKey {
+  const nameId = namehash(name);
+  const resolutionClassAddress = options?.classAddress ?? DEFAULT_RESOLUTION_CLASS_ADDRESS;
+  const [recordPda] = findRecordPda(
+    context,
+    resolutionClassAddress,
+    nameId
+  );
+
+  return recordPda;
+}
+
 export type ResolveOptions = {
    classAddress?: PublicKey;
    chainCaip2?: string;
@@ -33,13 +55,11 @@ export async function resolve(
   const chainCaip2 = validateAndNormalizeCAIP2(
     options?.chainCaip2 || DEFAULT_SOLANA_CAIP2
   );
-  const resolutionClassAddress = options?.classAddress ?? DEFAULT_RESOLUTION_CLASS_ADDRESS;
 
-  const nameId = namehash(name);
-  const [recordPda] = findRecordPda(
+  const recordPda = findNameRecordPDA(
     context,
-    resolutionClassAddress,
-    nameId
+    name,
+    { classAddress: options?.classAddress }
   );
 
   const record = await safeFetchRecord(
@@ -64,7 +84,7 @@ function findWalletRecord(
   caip2: string,
 ): string | null {
   for (const [key, value] of tuples) {
-    if (key !== 'WALLET') {
+    if (key !== WALLET_RECORD_TYPE) {
       continue;
     }
 
