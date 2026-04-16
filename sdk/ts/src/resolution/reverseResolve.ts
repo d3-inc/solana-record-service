@@ -22,7 +22,6 @@ const REVERSE_NAME_RECORD_TYPE = 1; // RecordType::Name = 1
 export type ReverseNameRecord = {
   sld: string;
   tld: string;
-  tokenId: string;
 };
 
 export type ReverseResolveOptions = {
@@ -98,14 +97,14 @@ async function verifyWithForwardResolution(
 //   [0..8]  discriminator (8 bytes)
 //   [8]     version (u8)
 //   [9]     record_type (u8)
-//   [10..]  sld, tld, tokenId as borsh strings (u32+bytes each)
+//   [10..]  sld, tld as borsh strings (u32+bytes each)
 function getReverseRecordCodec() {
   const s = addCodecSizePrefix(getUtf8Codec(), getU32Codec());
-  const bodyCodec = getTupleCodec([s, s, s] as const);
+  const bodyCodec = getTupleCodec([s, s] as const);
 
   return {
     encode(record: ReverseNameRecord): Uint8Array {
-      const bodyBytes = bodyCodec.encode([record.sld, record.tld, record.tokenId]);
+      const bodyBytes = bodyCodec.encode([record.sld, record.tld]);
       const result = new Uint8Array(10 + bodyBytes.length);
       result.set(REVERSE_NAME_DISCRIMINATOR, 0);
       result[8] = REVERSE_NAME_VERSION;
@@ -128,8 +127,8 @@ function getReverseRecordCodec() {
       if (bytes[9] !== REVERSE_NAME_RECORD_TYPE) {
         throw new Error(`Unsupported reverse name record type: ${bytes[9]}`);
       }
-      const [sld, tld, tokenId] = bodyCodec.decode(bytes.slice(10));
-      return { sld, tld, tokenId };
+      const [sld, tld] = bodyCodec.decode(bytes.slice(10));
+      return { sld, tld };
     },
   };
 }
