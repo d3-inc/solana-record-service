@@ -5,7 +5,7 @@
 //! <https://github.com/codama-idl/codama>
 //!
 
-use crate::generated::types::AdditionalMetadata;
+use crate::types::AdditionalMetadata;
 use borsh::BorshDeserialize;
 use borsh::BorshSerialize;
 

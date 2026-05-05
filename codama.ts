@@ -894,4 +894,13 @@ const root = rootNode(
 const codama = createFromRoot(root)
 
 codama.accept(renderJavaScriptUmiVisitor('sdk/ts/src/generated', { formatCode: true }));
-codama.accept(renderRustVisitor('sdk/rust/src/client', { crateFolder: 'sdk/rust/', formatCode: true }));
+codama.accept(renderRustVisitor('sdk/rust/src/client', {
+    crateFolder: 'sdk/rust/',
+    formatCode: true,
+    linkOverrides: {
+        definedTypes: {
+            metadata: 'crate::types',
+            additionalMetadata: 'crate::types'
+        }
+    }
+}));
