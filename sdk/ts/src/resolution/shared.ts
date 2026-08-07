@@ -117,6 +117,16 @@ export function normalizeName(name: string): string {
 }
 
 /**
+ * Overrides the default `name` → `nameId` mapping used to derive a forward-resolution
+ * record's PDA seed. Defaults to {@link namehash}.
+ *
+ * A custom implementation should throw {@link ResolutionInvalidNameError} for invalid
+ * names to get the same per-name error isolation that `resolveBatch` gives `namehash`
+ * failures; any other thrown error propagates and aborts the whole batch.
+ */
+export type NameToNameId = (name: string) => Uint8Array;
+
+/**
  * Computes the Keccak-256 namehash of a domain name.
  * The name is normalized before hashing; labels are processed from TLD to SLD.
  * @throws {ResolutionInvalidNameError} if the name fails normalization.

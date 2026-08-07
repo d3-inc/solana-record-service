@@ -1,12 +1,12 @@
 use solana_pubkey::Pubkey;
 
 use super::errors::ResolutionError;
-use super::shared::{
-    deserialize_srs_mappings, find_record_pda, namehash, serialize_srs_mappings, SrsMapping,
-    WALLET_MAPPING_TYPE,
-};
 #[cfg(feature = "name-resolution-fetch")]
 use super::shared::validate_and_normalize_caip2;
+use super::shared::{
+    deserialize_srs_mappings, find_record_pda, namehash, serialize_srs_mappings, NameToNameId,
+    SrsMapping, WALLET_MAPPING_TYPE,
+};
 
 /// Default CAIP-2 chain identifier for Solana.
 /// Uses the wildcard namespace per CAIP-363.
@@ -25,10 +25,20 @@ pub struct WalletMapping {
 ///
 /// Seeds: `["record", class_address, keccak256_namehash(name)]`
 ///
+/// `name_to_name_id` overrides the default `name` → `nameId` mapping ([`namehash`]);
+/// pass `None` to use the default.
+///
 /// # Errors
 /// Returns [`ResolutionError::InvalidName`] if the name fails IDNA normalization.
-pub fn find_name_record_pda(name: &str, class_address: &Pubkey) -> Result<Pubkey, ResolutionError> {
-    let name_hash = namehash(name)?;
+pub fn find_name_record_pda(
+    name: &str,
+    class_address: &Pubkey,
+    name_to_name_id: Option<&NameToNameId>,
+) -> Result<Pubkey, ResolutionError> {
+    let name_hash = match name_to_name_id {
+        Some(f) => f(name)?,
+        None => namehash(name)?,
+    };
     let (pda, _) = find_record_pda(class_address, &name_hash);
     Ok(pda)
 }
@@ -40,8 +50,12 @@ pub fn serialize_wallet_mappings(mappings: &[WalletMapping]) -> Vec<u8> {
         .iter()
         .map(|m| {
             let mut data = Vec::new();
-            m.serialize(&mut data).expect("WalletMapping Borsh serialization is infallible");
-            SrsMapping { mapping_type: WALLET_MAPPING_TYPE, data }
+            m.serialize(&mut data)
+                .expect("WalletMapping Borsh serialization is infallible");
+            SrsMapping {
+                mapping_type: WALLET_MAPPING_TYPE,
+                data,
+            }
         })
         .collect();
     serialize_srs_mappings(&srs)
@@ -66,7 +80,10 @@ pub fn deserialize_wallet_mappings(data: &[u8]) -> Result<Vec<WalletMapping>, Re
 
 #[cfg(feature = "name-resolution-fetch")]
 fn find_wallet_address(mappings: &[WalletMapping], chain_caip2: &str) -> Option<String> {
-    mappings.iter().find(|m| m.chain_caip2 == chain_caip2).map(|m| m.address.clone())
+    mappings
+        .iter()
+        .find(|m| m.chain_caip2 == chain_caip2)
+        .map(|m| m.address.clone())
 }
 
 // ── RPC-dependent functions ──────────────────────────────────────────────────
@@ -87,18 +104,19 @@ pub fn resolve(
     name: &str,
     class_address: &Pubkey,
     chain_caip2: Option<&str>,
+    name_to_name_id: Option<&NameToNameId>,
 ) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
 
     let chain = validate_and_normalize_caip2(chain_caip2.unwrap_or(DEFAULT_SOLANA_CAIP2))?;
-    let pda = find_name_record_pda(name, class_address)?;
+    let pda = find_name_record_pda(name, class_address, name_to_name_id)?;
 
     let Some(data) = rpc.get_account(&pda)? else {
         return Ok(None);
     };
 
-    let record = Record::from_bytes(&data)
-        .map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
+    let record =
+        Record::from_bytes(&data).map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
 
     let mappings = deserialize_wallet_mappings(&record.data)?;
     Ok(find_wallet_address(&mappings, &chain))
@@ -120,8 +138,11 @@ pub fn resolve_batch(
     names: &[&str],
     class_address: &Pubkey,
     chain_caip2: Option<&str>,
-) -> Result<std::collections::HashMap<String, Result<Option<String>, ResolutionError>>, ResolutionError>
-{
+    name_to_name_id: Option<&NameToNameId>,
+) -> Result<
+    std::collections::HashMap<String, Result<Option<String>, ResolutionError>>,
+    ResolutionError,
+> {
     use std::collections::HashMap;
 
     if names.is_empty() {
@@ -136,7 +157,7 @@ pub fn resolve_batch(
     let mut valid_pdas: Vec<Pubkey> = Vec::new();
 
     for (i, name) in names.iter().enumerate() {
-        match find_name_record_pda(name, class_address) {
+        match find_name_record_pda(name, class_address, name_to_name_id) {
             Ok(pda) => {
                 valid_indices.push(i);
                 valid_pdas.push(pda);
@@ -150,7 +171,10 @@ pub fn resolve_batch(
     if !valid_pdas.is_empty() {
         let accounts = rpc.get_multiple_accounts(&valid_pdas)?;
         for (account_opt, &name_idx) in accounts.into_iter().zip(valid_indices.iter()) {
-            result.insert(names[name_idx].to_string(), resolve_one_forward(account_opt, &chain));
+            result.insert(
+                names[name_idx].to_string(),
+                resolve_one_forward(account_opt, &chain),
+            );
         }
     }
 
@@ -163,7 +187,9 @@ fn resolve_one_forward(
     chain: &str,
 ) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
-    let Some(data) = account_opt else { return Ok(None) };
+    let Some(data) = account_opt else {
+        return Ok(None);
+    };
     let record =
         Record::from_bytes(&data).map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
     let mappings = deserialize_wallet_mappings(&record.data)?;
@@ -171,6 +197,17 @@ fn resolve_one_forward(
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
+
+// Deterministic stand-in for `namehash` used to prove a custom `name_to_name_id` override is
+// honored: truncates/pads the name's UTF-8 bytes into a 32-byte seed instead of hashing it.
+#[cfg(test)]
+fn stub_name_to_name_id(name: &str) -> Result<[u8; 32], ResolutionError> {
+    let mut seed = [0u8; 32];
+    let bytes = name.as_bytes();
+    let n = bytes.len().min(32);
+    seed[..n].copy_from_slice(&bytes[..n]);
+    Ok(seed)
+}
 
 #[cfg(test)]
 mod tests {
@@ -200,9 +237,18 @@ mod tests {
     #[test]
     fn round_trip_multiple_chains() {
         let original = vec![
-            WalletMapping { chain_caip2: "solana:_".to_string(), address: "addr-sol".to_string() },
-            WalletMapping { chain_caip2: "eip155:1".to_string(), address: "0xdeadbeef".to_string() },
-            WalletMapping { chain_caip2: "bip122:_".to_string(), address: "bc1qxyz".to_string() },
+            WalletMapping {
+                chain_caip2: "solana:_".to_string(),
+                address: "addr-sol".to_string(),
+            },
+            WalletMapping {
+                chain_caip2: "eip155:1".to_string(),
+                address: "0xdeadbeef".to_string(),
+            },
+            WalletMapping {
+                chain_caip2: "bip122:_".to_string(),
+                address: "bc1qxyz".to_string(),
+            },
         ];
         let bytes = serialize_wallet_mappings(&original);
         let decoded = deserialize_wallet_mappings(&bytes).unwrap();
@@ -220,8 +266,14 @@ mod tests {
         let mut payload = Vec::new();
         borsh::BorshSerialize::serialize(&good, &mut payload).unwrap();
         let bytes = serialize_srs_mappings(&[
-            SrsMapping { mapping_type: WALLET_MAPPING_TYPE, data: payload },
-            SrsMapping { mapping_type: 99, data: b"ignored".to_vec() },
+            SrsMapping {
+                mapping_type: WALLET_MAPPING_TYPE,
+                data: payload,
+            },
+            SrsMapping {
+                mapping_type: 99,
+                data: b"ignored".to_vec(),
+            },
         ]);
         let decoded = deserialize_wallet_mappings(&bytes).unwrap();
         assert_eq!(decoded, vec![good]);
@@ -232,8 +284,8 @@ mod tests {
     #[test]
     fn pda_is_case_insensitive() {
         let class = Pubkey::default();
-        let pda1 = find_name_record_pda("Example.COM", &class).unwrap();
-        let pda2 = find_name_record_pda("example.com", &class).unwrap();
+        let pda1 = find_name_record_pda("Example.COM", &class, None).unwrap();
+        let pda2 = find_name_record_pda("example.com", &class, None).unwrap();
         assert_eq!(pda1, pda2);
     }
 
@@ -242,8 +294,29 @@ mod tests {
     fn pda_golden_value_matches_ts() {
         // TS test: findNameRecordPDA(ctx, 'example.com', '1111...1111') === '8E1gwbcWbejdmjqZ8MFUpMA5mfnWLcaXWxGMPoDzBtP2'
         let class = Pubkey::default(); // all-zeros = "11111111111111111111111111111111"
-        let pda = find_name_record_pda("example.com", &class).unwrap();
-        assert_eq!(pda.to_string(), "8E1gwbcWbejdmjqZ8MFUpMA5mfnWLcaXWxGMPoDzBtP2");
+        let pda = find_name_record_pda("example.com", &class, None).unwrap();
+        assert_eq!(
+            pda.to_string(),
+            "8E1gwbcWbejdmjqZ8MFUpMA5mfnWLcaXWxGMPoDzBtP2"
+        );
+    }
+
+    #[test]
+    fn pda_uses_custom_name_to_name_id_override() {
+        let class = Pubkey::default();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let default_pda = find_name_record_pda("example.com", &class, None).unwrap();
+        let custom_pda = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        assert_ne!(default_pda, custom_pda);
+    }
+
+    #[test]
+    fn pda_is_deterministic_for_custom_name_to_name_id() {
+        let class = Pubkey::default();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let pda1 = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        let pda2 = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        assert_eq!(pda1, pda2);
     }
 }
 
@@ -278,14 +351,14 @@ mod fetch_tests {
         // Manual layout: disc(1) + class(32) + owner_type(1) + owner(32)
         //                + is_frozen(1) + expiry(8) + seed_len_u8(1) + srs_data
         let mut bytes = Vec::with_capacity(76 + srs_data.len());
-        bytes.push(0u8);                         // discriminator
-        bytes.extend_from_slice(&[0u8; 32]);     // class = default Pubkey
-        bytes.push(0u8);                         // owner_type
-        bytes.extend_from_slice(&[0u8; 32]);     // owner = default Pubkey
-        bytes.push(0u8);                         // is_frozen = false
+        bytes.push(0u8); // discriminator
+        bytes.extend_from_slice(&[0u8; 32]); // class = default Pubkey
+        bytes.push(0u8); // owner_type
+        bytes.extend_from_slice(&[0u8; 32]); // owner = default Pubkey
+        bytes.push(0u8); // is_frozen = false
         bytes.extend_from_slice(&0i64.to_le_bytes()); // expiry = 0
-        bytes.push(0u8);                         // U8PrefixVec seed length = 0
-        bytes.extend_from_slice(&srs_data);      // RemainderVec data (no framing)
+        bytes.push(0u8); // U8PrefixVec seed length = 0
+        bytes.extend_from_slice(&srs_data); // RemainderVec data (no framing)
         bytes
     }
 
@@ -294,26 +367,29 @@ mod fetch_tests {
     #[test]
     fn resolve_returns_address_for_matching_chain() {
         let class = Pubkey::default();
-        let pda = find_name_record_pda("example.com", &class).unwrap();
+        let pda = find_name_record_pda("example.com", &class, None).unwrap();
         let srs = serialize_wallet_mappings(&[WalletMapping {
             chain_caip2: "solana:_".to_string(),
             address: "So11111111111111111111111111111111111111112".to_string(),
         }]);
         let rpc = MockRpc(HashMap::from([(pda, make_account_bytes(srs))]));
-        let result = resolve(&rpc, "example.com", &class, None).unwrap();
-        assert_eq!(result, Some("So11111111111111111111111111111111111111112".to_string()));
+        let result = resolve(&rpc, "example.com", &class, None, None).unwrap();
+        assert_eq!(
+            result,
+            Some("So11111111111111111111111111111111111111112".to_string())
+        );
     }
 
     #[test]
     fn resolve_returns_none_for_unmatched_chain() {
         let class = Pubkey::default();
-        let pda = find_name_record_pda("example.com", &class).unwrap();
+        let pda = find_name_record_pda("example.com", &class, None).unwrap();
         let srs = serialize_wallet_mappings(&[WalletMapping {
             chain_caip2: "solana:_".to_string(),
             address: "some_addr".to_string(),
         }]);
         let rpc = MockRpc(HashMap::from([(pda, make_account_bytes(srs))]));
-        let result = resolve(&rpc, "example.com", &class, Some("eip155:1")).unwrap();
+        let result = resolve(&rpc, "example.com", &class, Some("eip155:1"), None).unwrap();
         assert_eq!(result, None);
     }
 
@@ -321,8 +397,22 @@ mod fetch_tests {
     fn resolve_returns_none_when_account_missing() {
         let class = Pubkey::default();
         let rpc = MockRpc(HashMap::new());
-        let result = resolve(&rpc, "example.com", &class, None).unwrap();
+        let result = resolve(&rpc, "example.com", &class, None, None).unwrap();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn resolve_uses_custom_name_to_name_id_override() {
+        let class = Pubkey::default();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let pda = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        let srs = serialize_wallet_mappings(&[WalletMapping {
+            chain_caip2: "solana:_".to_string(),
+            address: "CustomAddr".to_string(),
+        }]);
+        let rpc = MockRpc(HashMap::from([(pda, make_account_bytes(srs))]));
+        let result = resolve(&rpc, "example.com", &class, None, Some(custom)).unwrap();
+        assert_eq!(result, Some("CustomAddr".to_string()));
     }
 
     // ── resolve_batch ─────────────────────────────────────────────────────────
@@ -332,15 +422,18 @@ mod fetch_tests {
         name: &str,
         class: &Pubkey,
     ) -> Result<Option<String>, ResolutionError> {
-        resolve_batch(rpc, &[name], class, None).unwrap().remove(name).unwrap()
+        resolve_batch(rpc, &[name], class, None, None)
+            .unwrap()
+            .remove(name)
+            .unwrap()
     }
 
     #[test]
     fn resolve_batch_all_names_present_in_result() {
         let class = Pubkey::default();
         let names = ["alice.com", "bob.com", "missing.com"];
-        let alice_pda = find_name_record_pda("alice.com", &class).unwrap();
-        let bob_pda = find_name_record_pda("bob.com", &class).unwrap();
+        let alice_pda = find_name_record_pda("alice.com", &class, None).unwrap();
+        let bob_pda = find_name_record_pda("bob.com", &class, None).unwrap();
         let alice_srs = serialize_wallet_mappings(&[WalletMapping {
             chain_caip2: "solana:_".to_string(),
             address: "alice_addr".to_string(),
@@ -353,24 +446,31 @@ mod fetch_tests {
             (alice_pda, make_account_bytes(alice_srs)),
             (bob_pda, make_account_bytes(bob_srs)),
         ]));
-        let result = resolve_batch(&rpc, &names, &class, None).unwrap();
+        let result = resolve_batch(&rpc, &names, &class, None, None).unwrap();
         assert_eq!(result.len(), 3);
-        assert_eq!(result["alice.com"].as_ref().unwrap(), &Some("alice_addr".to_string()));
-        assert_eq!(result["bob.com"].as_ref().unwrap(), &Some("bob_addr".to_string()));
+        assert_eq!(
+            result["alice.com"].as_ref().unwrap(),
+            &Some("alice_addr".to_string())
+        );
+        assert_eq!(
+            result["bob.com"].as_ref().unwrap(),
+            &Some("bob_addr".to_string())
+        );
         assert_eq!(result["missing.com"].as_ref().unwrap(), &None);
     }
 
     #[test]
     fn resolve_batch_none_for_unmatched_chain() {
         let class = Pubkey::default();
-        let pda = find_name_record_pda("alice.com", &class).unwrap();
+        let pda = find_name_record_pda("alice.com", &class, None).unwrap();
         let srs = serialize_wallet_mappings(&[WalletMapping {
             chain_caip2: "solana:_".to_string(),
             address: "addr".to_string(),
         }]);
         let rpc = MockRpc(HashMap::from([(pda, make_account_bytes(srs))]));
         assert_eq!(
-            resolve_batch(&rpc, &["alice.com"], &class, Some("eip155:1")).unwrap()["alice.com"]
+            resolve_batch(&rpc, &["alice.com"], &class, Some("eip155:1"), None).unwrap()
+                ["alice.com"]
                 .as_ref()
                 .unwrap(),
             &None
@@ -380,17 +480,26 @@ mod fetch_tests {
     #[test]
     fn resolve_batch_errors_on_malformed_record_bytes() {
         let class = Pubkey::default();
-        let pda = find_name_record_pda("alice.com", &class).unwrap();
+        let pda = find_name_record_pda("alice.com", &class, None).unwrap();
         let rpc = MockRpc(HashMap::from([(pda, b"garbage".to_vec())]));
-        assert!(matches!(batch_one(&rpc, "alice.com", &class), Err(ResolutionError::DecodeError(_))));
+        assert!(matches!(
+            batch_one(&rpc, "alice.com", &class),
+            Err(ResolutionError::DecodeError(_))
+        ));
     }
 
     #[test]
     fn resolve_batch_errors_on_malformed_srs_data() {
         let class = Pubkey::default();
-        let pda = find_name_record_pda("alice.com", &class).unwrap();
-        let rpc = MockRpc(HashMap::from([(pda, make_account_bytes(b"not_srs!".to_vec()))]));
-        assert!(matches!(batch_one(&rpc, "alice.com", &class), Err(ResolutionError::DecodeError(_))));
+        let pda = find_name_record_pda("alice.com", &class, None).unwrap();
+        let rpc = MockRpc(HashMap::from([(
+            pda,
+            make_account_bytes(b"not_srs!".to_vec()),
+        )]));
+        assert!(matches!(
+            batch_one(&rpc, "alice.com", &class),
+            Err(ResolutionError::DecodeError(_))
+        ));
     }
 
     #[test]
@@ -399,9 +508,26 @@ mod fetch_tests {
         let rpc = MockRpc(HashMap::new());
         // "-bad.com" is an invalid domain; the batch itself succeeds (outer Ok),
         // but that name's entry carries an Err.
-        let result = resolve_batch(&rpc, &["-bad.com", "valid.com"], &class, None).unwrap();
+        let result = resolve_batch(&rpc, &["-bad.com", "valid.com"], &class, None, None).unwrap();
         assert_eq!(result.len(), 2);
         assert!(matches!(result["-bad.com"], Err(_)));
         assert_eq!(result["valid.com"].as_ref().unwrap(), &None);
+    }
+
+    #[test]
+    fn resolve_batch_uses_custom_name_to_name_id_override() {
+        let class = Pubkey::default();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let alice_pda = find_name_record_pda("alice.com", &class, Some(custom)).unwrap();
+        let alice_srs = serialize_wallet_mappings(&[WalletMapping {
+            chain_caip2: "solana:_".to_string(),
+            address: "alice_custom".to_string(),
+        }]);
+        let rpc = MockRpc(HashMap::from([(alice_pda, make_account_bytes(alice_srs))]));
+        let result = resolve_batch(&rpc, &["alice.com"], &class, None, Some(custom)).unwrap();
+        assert_eq!(
+            result["alice.com"].as_ref().unwrap(),
+            &Some("alice_custom".to_string())
+        );
     }
 }

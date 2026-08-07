@@ -22,6 +22,15 @@ import {
   serializeWalletMappings,
   type WalletMapping,
 } from '../../src/resolution/resolve';
+import type { NameToNameId } from '../../src/resolution/shared';
+
+// Deterministic stand-in for `namehash` used to prove a custom `nameToNameId` is honored:
+// truncates/pads the name's UTF-8 bytes into a 32-byte seed instead of hashing it.
+const stubNameToNameId: NameToNameId = (name) => {
+  const seed = new Uint8Array(32);
+  seed.set(new TextEncoder().encode(name).slice(0, 32));
+  return seed;
+};
 
 const CLASS_ADDRESS = publicKey('11111111111111111111111111111111');
 
@@ -149,6 +158,18 @@ describe('findNameRecordPDA', () => {
       ResolutionInvalidNameError,
     );
   });
+
+  it('uses a custom nameToNameId override to derive a different PDA', () => {
+    const defaultPda = findNameRecordPDA(ctx, 'example.com', classAddress);
+    const customPda = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
+    assert.notEqual(customPda, defaultPda);
+  });
+
+  it('is deterministic for the same custom nameToNameId', () => {
+    const pda1 = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
+    const pda2 = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
+    assert.equal(pda1, pda2);
+  });
 });
 
 describe('resolve', () => {
@@ -214,6 +235,30 @@ describe('resolve', () => {
   it('throws ResolutionInvalidNameError for an invalid name', async () => {
     const ctx = makeMockContext(makeRecordAccount([]));
     await assertRejects(() => resolve(ctx, '-bad.com', CLASS_ADDRESS), ResolutionInvalidNameError);
+  });
+
+  it('honors a custom nameToNameId override to look up the record', async () => {
+    const umi = createUmi('http://test.local');
+    const expectedPda = findNameRecordPDA(umi, 'example.com', CLASS_ADDRESS, stubNameToNameId);
+    let requestedPk: PublicKey | undefined;
+    const ctx = {
+      programs: umi.programs,
+      eddsa: umi.eddsa,
+      rpc: {
+        ...umi.rpc,
+        getAccount: async (pk: PublicKey): Promise<MaybeRpcAccount> => {
+          requestedPk = pk;
+          return makeRecordAccount([{ chainCaip2: 'solana:_', address: 'CustomAddr' }]);
+        },
+      },
+    };
+
+    const result = await resolve(ctx, 'example.com', CLASS_ADDRESS, {
+      nameToNameId: stubNameToNameId,
+    });
+
+    assert.equal(result, 'CustomAddr');
+    assert.equal(requestedPk, expectedPda);
   });
 
   function makeMockContext(account: MaybeRpcAccount | null) {
@@ -327,6 +372,28 @@ describe('resolveBatch', () => {
       () => resolveBatch(ctx, ['example.com'], CLASS_ADDRESS, { chainCaip2: 'INVALID' }),
       ResolutionInvalidCAIP2Error,
     );
+  });
+
+  it('honors a custom nameToNameId override for every name in the batch', async () => {
+    const umi = createUmi('http://test.local');
+    const names = ['alice.com', 'bob.com'];
+    const expectedPdas = names.map((n) => findNameRecordPDA(umi, n, CLASS_ADDRESS, stubNameToNameId));
+    let requestedPks: PublicKey[] = [];
+    const ctx = {
+      programs: umi.programs,
+      eddsa: umi.eddsa,
+      rpc: {
+        ...umi.rpc,
+        getAccounts: async (pks: PublicKey[]): Promise<MaybeRpcAccount[]> => {
+          requestedPks = pks;
+          return pks.map((pk) => ({ publicKey: pk, exists: false }));
+        },
+      },
+    };
+
+    await resolveBatch(ctx, names, CLASS_ADDRESS, { nameToNameId: stubNameToNameId });
+
+    assert.deepEqual(requestedPks, expectedPdas);
   });
 
   // The mock dequeues one batch per getAccounts call; publicKey is overridden with the

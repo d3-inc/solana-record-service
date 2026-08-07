@@ -26,7 +26,10 @@ pub struct SrsMapping {
 /// where each `SrsMapping` is Borsh-encoded as `type_u8 + data_len_u32_le + data`.
 pub fn serialize_srs_mappings(mappings: &[SrsMapping]) -> Vec<u8> {
     let mut body = Vec::new();
-    mappings.to_vec().serialize(&mut body).expect("Vec<SrsMapping> Borsh serialization is infallible");
+    mappings
+        .to_vec()
+        .serialize(&mut body)
+        .expect("Vec<SrsMapping> Borsh serialization is infallible");
     let mut out = Vec::with_capacity(8 + body.len());
     out.extend_from_slice(&SRS_RECORD_DATA_DISCRIMINATOR);
     out.extend_from_slice(&body);
@@ -76,7 +79,9 @@ fn is_valid_caip2(s: &str) -> bool {
             let ref_len = reference.len();
             let ns_ok = ns_len >= 3
                 && ns_len <= 8
-                && ns.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
+                && ns
+                    .chars()
+                    .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-');
             let ref_ok = ref_len >= 1
                 && ref_len <= 32
                 && reference
@@ -110,6 +115,14 @@ pub fn normalize_name(name: &str) -> Result<String, ResolutionError> {
         .map_err(|_| ResolutionError::InvalidName(name.to_string()))?;
     Ok(ascii)
 }
+
+/// Overrides the default `name` → `nameId` mapping used to derive a forward-resolution
+/// record's PDA seed. Defaults to [`namehash`].
+///
+/// A custom implementation should return [`ResolutionError::InvalidName`] for invalid
+/// names to get the same per-name error isolation that `resolve_batch` gives `namehash`
+/// failures; any other error propagates and aborts the whole batch.
+pub type NameToNameId = dyn Fn(&str) -> Result<[u8; 32], ResolutionError>;
 
 /// Computes the Keccak-256 namehash of a domain name.
 ///
@@ -162,7 +175,10 @@ mod tests {
 
     #[test]
     fn round_trip_single_mapping() {
-        let original = vec![SrsMapping { mapping_type: 1, data: b"hello".to_vec() }];
+        let original = vec![SrsMapping {
+            mapping_type: 1,
+            data: b"hello".to_vec(),
+        }];
         let bytes = serialize_srs_mappings(&original);
         let decoded = deserialize_srs_mappings(&bytes).unwrap();
         assert_eq!(decoded, original);
@@ -171,9 +187,18 @@ mod tests {
     #[test]
     fn round_trip_multiple_mappings() {
         let original = vec![
-            SrsMapping { mapping_type: 1, data: b"data1".to_vec() },
-            SrsMapping { mapping_type: 2, data: b"data2longer".to_vec() },
-            SrsMapping { mapping_type: 99, data: vec![] },
+            SrsMapping {
+                mapping_type: 1,
+                data: b"data1".to_vec(),
+            },
+            SrsMapping {
+                mapping_type: 2,
+                data: b"data2longer".to_vec(),
+            },
+            SrsMapping {
+                mapping_type: 99,
+                data: vec![],
+            },
         ];
         let bytes = serialize_srs_mappings(&original);
         let decoded = deserialize_srs_mappings(&bytes).unwrap();
@@ -202,17 +227,26 @@ mod tests {
 
     #[test]
     fn caip2_valid_solana() {
-        assert_eq!(validate_and_normalize_caip2("solana:_").unwrap(), "solana:_");
+        assert_eq!(
+            validate_and_normalize_caip2("solana:_").unwrap(),
+            "solana:_"
+        );
     }
 
     #[test]
     fn caip2_valid_eip155() {
-        assert_eq!(validate_and_normalize_caip2("eip155:1").unwrap(), "eip155:1");
+        assert_eq!(
+            validate_and_normalize_caip2("eip155:1").unwrap(),
+            "eip155:1"
+        );
     }
 
     #[test]
     fn caip2_trims_whitespace() {
-        assert_eq!(validate_and_normalize_caip2("  solana:_  ").unwrap(), "solana:_");
+        assert_eq!(
+            validate_and_normalize_caip2("  solana:_  ").unwrap(),
+            "solana:_"
+        );
     }
 
     #[test]
@@ -253,12 +287,18 @@ mod tests {
 
     #[test]
     fn normalize_rejects_empty() {
-        assert!(matches!(normalize_name(""), Err(ResolutionError::InvalidName(_))));
+        assert!(matches!(
+            normalize_name(""),
+            Err(ResolutionError::InvalidName(_))
+        ));
     }
 
     #[test]
     fn normalize_rejects_leading_hyphen() {
-        assert!(matches!(normalize_name("-bad.com"), Err(ResolutionError::InvalidName(_))));
+        assert!(matches!(
+            normalize_name("-bad.com"),
+            Err(ResolutionError::InvalidName(_))
+        ));
     }
 
     // ── namehash ───────────────────────────────────────────────────────────
@@ -266,7 +306,10 @@ mod tests {
     #[test]
     fn namehash_is_correct() {
         let h1 = namehash("example.com").unwrap();
-        assert_eq!(h1, hex_literal::hex!("f59ba973941fd531b0702df2592a8480fd9f28516c50a93626e652a8ce263832"));
+        assert_eq!(
+            h1,
+            hex_literal::hex!("f59ba973941fd531b0702df2592a8480fd9f28516c50a93626e652a8ce263832")
+        );
     }
 
     #[test]

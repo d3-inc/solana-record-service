@@ -14,6 +14,7 @@ import {
   deserializeSrsMappings,
   findRecordPda,
   NAME_MAPPING_TYPE,
+  type NameToNameId,
   normalizeName,
   sanitizeRpcOptions,
   serializeSrsMappings,
@@ -46,8 +47,10 @@ export type ReverseResolveOptions = (
       forwardClassAddress: PublicKey;
     }
   | { verifyReverseWithForward: false; forwardClassAddress?: undefined }
-) &
-  RpcBaseOptions;
+) & {
+  /** Overrides the default `name` → `nameId` mapping used during forward verification. Defaults to `namehash`. */
+  nameToNameId?: NameToNameId;
+} & RpcBaseOptions;
 
 const nameMappingPayloadCodec = tuple([string({ size: u32() }), string({ size: u32() })] as const);
 
@@ -167,6 +170,7 @@ export async function reverseResolveBatch(
   const forwardResults = await resolveBatch(context, uniqueNames, options.forwardClassAddress, {
     ...sanitizeRpcOptions(options),
     chainCaip2: DEFAULT_SOLANA_CAIP2,
+    nameToNameId: options?.nameToNameId,
   });
 
   for (const [wallet, name] of Object.entries(resolvedNames)) {
@@ -223,6 +227,7 @@ async function verifyWithForwardResolution(
   const resolvedWallet = await resolve(context, name, options.forwardClassAddress, {
     ...sanitizeRpcOptions(options),
     chainCaip2: DEFAULT_SOLANA_CAIP2,
+    nameToNameId: options?.nameToNameId,
   });
 
   if (!resolvedWallet) {

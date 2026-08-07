@@ -9,7 +9,11 @@ import { assert } from 'chai';
 
 import { getRecordAccountDataSerializer } from '../../src/generated/accounts/record';
 import { SrsRecordDecodeError } from '../../src/resolution/errors';
-import { serializeWalletMappings, type WalletMapping } from '../../src/resolution/resolve';
+import {
+  findNameRecordPDA,
+  serializeWalletMappings,
+  type WalletMapping,
+} from '../../src/resolution/resolve';
 import {
   deserializeNameMapping,
   reverseResolve,
@@ -19,9 +23,18 @@ import {
   type ReverseResolveOptions,
   type ReverseResolveResult,
 } from '../../src/resolution/reverseResolve';
+import type { NameToNameId } from '../../src/resolution/shared';
 
 const CLASS_ADDRESS = publicKey('11111111111111111111111111111111');
 const WALLET = publicKey('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+
+// Deterministic stand-in for `namehash` used to prove a custom `nameToNameId` is honored:
+// truncates/pads the name's UTF-8 bytes into a 32-byte seed instead of hashing it.
+const stubNameToNameId: NameToNameId = (name) => {
+  const seed = new Uint8Array(32);
+  seed.set(new TextEncoder().encode(name).slice(0, 32));
+  return seed;
+};
 
 // ASCII "mappings" — shared SrsRecordData discriminator
 const DISCRIMINATOR = new Uint8Array([0x6d, 0x61, 0x70, 0x70, 0x69, 0x6e, 0x67, 0x73]);
@@ -147,6 +160,39 @@ describe('reverseResolve', () => {
     assert.isNull(result);
   });
 
+  it('honors a custom nameToNameId override during forward verification', async () => {
+    const umi = createUmi('http://test.local');
+    const expectedForwardPda = findNameRecordPDA(
+      umi,
+      'example.com',
+      CLASS_ADDRESS,
+      stubNameToNameId,
+    );
+    const requestedPks: PublicKey[] = [];
+    const ctx = {
+      programs: umi.programs,
+      eddsa: umi.eddsa,
+      rpc: {
+        ...umi.rpc,
+        getAccount: async (pk: PublicKey): Promise<MaybeRpcAccount> => {
+          requestedPks.push(pk);
+          return requestedPks.length === 1
+            ? makeReverseRecordAccount({ sld: 'example', tld: 'com' })
+            : makeForwardRecordAccount([{ chainCaip2: 'solana:_', address: WALLET }]);
+        },
+      },
+    };
+
+    const result = await reverseResolve(ctx, WALLET, CLASS_ADDRESS, {
+      verifyReverseWithForward: true,
+      forwardClassAddress: CLASS_ADDRESS,
+      nameToNameId: stubNameToNameId,
+    });
+
+    assert.equal(result, 'example.com');
+    assert.equal(requestedPks[1], expectedForwardPda);
+  });
+
   // Returns a context whose rpc.getAccount dequeues from `accounts` on each call.
   function makeMockContext(accounts: (MaybeRpcAccount | null)[]) {
     const umi = createUmi('http://test.local');
@@ -268,6 +314,48 @@ describe('reverseResolveBatch', () => {
       forwardClassAddress: CLASS_ADDRESS,
     });
     assert.deepEqual(result, { [WALLET]: ok(null) });
+  });
+
+  it('honors a custom nameToNameId override during forward verification', async () => {
+    const umi = createUmi('http://test.local');
+    const expectedForwardPda = findNameRecordPDA(
+      umi,
+      'example.com',
+      CLASS_ADDRESS,
+      stubNameToNameId,
+    );
+    let forwardPks: PublicKey[] = [];
+    let call = 0;
+    const ctx = {
+      programs: umi.programs,
+      eddsa: umi.eddsa,
+      rpc: {
+        ...umi.rpc,
+        getAccounts: async (pks: PublicKey[]): Promise<MaybeRpcAccount[]> => {
+          call += 1;
+          if (call === 1) {
+            return pks.map((pk) => ({
+              ...makeReverseRecordAccount({ sld: 'example', tld: 'com' }),
+              publicKey: pk,
+            }));
+          }
+          forwardPks = pks;
+          return pks.map((pk) => ({
+            ...makeForwardRecordAccount([{ chainCaip2: 'solana:_', address: WALLET }]),
+            publicKey: pk,
+          }));
+        },
+      },
+    };
+
+    const result = await reverseResolveBatch(ctx, [WALLET], CLASS_ADDRESS, {
+      verifyReverseWithForward: true,
+      forwardClassAddress: CLASS_ADDRESS,
+      nameToNameId: stubNameToNameId,
+    });
+
+    assert.deepEqual(result, { [WALLET]: ok('example.com') });
+    assert.deepEqual(forwardPks, [expectedForwardPda]);
   });
 
   // The mock dequeues one batch per getAccounts call; publicKey is overridden with the
