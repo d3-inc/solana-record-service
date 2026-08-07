@@ -103,6 +103,7 @@ export function normalizeName(name: string): string {
   const asciiName = tr46.toASCII(trimmed, {
     checkBidi: true,
     checkHyphens: true,
+    checkJoiners: true,
     useSTD3ASCIIRules: true,
     verifyDNSLength: true,
     transitionalProcessing: false,

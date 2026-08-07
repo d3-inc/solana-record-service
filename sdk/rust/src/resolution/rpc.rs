@@ -22,12 +22,13 @@ pub trait Rpc {
 
 impl Rpc for solana_client::rpc_client::RpcClient {
     fn get_account(&self, pubkey: &Pubkey) -> Result<Option<Vec<u8>>, ResolutionError> {
-        use solana_sdk::commitment_config::CommitmentConfig;
-        Ok(self
-            .get_account_with_commitment(pubkey, CommitmentConfig::confirmed())
-            .map_err(|e| ResolutionError::RpcError(e.to_string()))?
-            .value
-            .map(|a| a.data))
+        solana_client::rpc_client::RpcClient::get_account_with_commitment(
+            self,
+            pubkey,
+            self.commitment(),
+        )
+        .map_err(|e| ResolutionError::RpcError(e.to_string()))
+        .map(|response| response.value.map(|account| account.data))
     }
 
     fn get_multiple_accounts(

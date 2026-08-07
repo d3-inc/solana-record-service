@@ -157,6 +157,7 @@ pub fn resolve_batch(
     Ok(result)
 }
 
+#[cfg(feature = "fetch")]
 fn resolve_one_forward(
     account_opt: Option<Vec<u8>>,
     chain: &str,

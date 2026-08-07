@@ -90,6 +90,10 @@ fn is_valid_caip2(s: &str) -> bool {
 
 /// Normalizes a domain name using IDNA/UTS#46 (lowercase, punycode, STD3 rules).
 ///
+/// Mirrors the TS SDK's `tr46.toASCII` call: `checkHyphens`, `useSTD3ASCIIRules`, and
+/// `verifyDNSLength` are enabled and `transitionalProcessing` is disabled. `checkBidi`
+/// and `checkJoiners` are always enforced by the `idna` crate and are not configurable.
+///
 /// # Errors
 /// Returns [`ResolutionError::InvalidName`] if the name is empty or fails IDNA validation.
 pub fn normalize_name(name: &str) -> Result<String, ResolutionError> {
@@ -97,14 +101,13 @@ pub fn normalize_name(name: &str) -> Result<String, ResolutionError> {
     if trimmed.is_empty() {
         return Err(ResolutionError::InvalidName(name.to_string()));
     }
-    let ascii = idna::domain_to_ascii_strict(trimmed)
+    let ascii = idna::Config::default()
+        .use_std3_ascii_rules(true)
+        .transitional_processing(false)
+        .verify_dns_length(true)
+        .check_hyphens(true)
+        .to_ascii(trimmed)
         .map_err(|_| ResolutionError::InvalidName(name.to_string()))?;
-    // Enforce checkHyphens: no label may start or end with a hyphen (mirrors tr46 checkHyphens: true).
-    for label in ascii.split('.') {
-        if label.starts_with('-') || label.ends_with('-') {
-            return Err(ResolutionError::InvalidName(name.to_string()));
-        }
-    }
     Ok(ascii)
 }
 

@@ -163,6 +163,7 @@ pub fn reverse_resolve_batch(
     Ok(result)
 }
 
+#[cfg(feature = "fetch")]
 fn resolve_one(account_opt: Option<Vec<u8>>) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
     let Some(data) = account_opt else { return Ok(None) };
