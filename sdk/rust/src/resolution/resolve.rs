@@ -27,9 +27,6 @@ pub struct WalletMapping {
 ///
 /// `name_to_name_id` overrides the default `name` → `nameId` mapping ([`namehash`]);
 /// pass `None` to use the default.
-///
-/// # Errors
-/// Returns [`ResolutionError::InvalidName`] if the name fails IDNA normalization.
 pub fn find_name_record_pda(
     name: &str,
     class_address: &Pubkey,

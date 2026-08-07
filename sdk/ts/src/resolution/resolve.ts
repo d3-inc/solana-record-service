@@ -9,10 +9,10 @@ import {
   deserializeSrsMappings,
   findRecordPda,
   namehash,
-  type NameToNameId,
   sanitizeRpcOptions,
   serializeSrsMappings,
   validateAndNormalizeCAIP2,
+  type NameToNameId,
 } from './shared';
 
 /**
@@ -46,6 +46,9 @@ export function findNameRecordPDA(
   nameToNameId: NameToNameId = namehash,
 ): PublicKey {
   const nameId = nameToNameId(name);
+  if (nameId.length !== 32) {
+    throw new Error(`nameToNameId must return a 32-byte seed, got ${nameId.length}`);
+  }
   const [recordPda] = findRecordPda(context, classAddress, nameId);
 
   return recordPda;
