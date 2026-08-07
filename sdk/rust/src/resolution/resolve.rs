@@ -5,7 +5,7 @@ use super::shared::{
     deserialize_srs_mappings, find_record_pda, namehash, serialize_srs_mappings, SrsMapping,
     WALLET_MAPPING_TYPE,
 };
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 use super::shared::validate_and_normalize_caip2;
 
 /// Default CAIP-2 chain identifier for Solana.
@@ -64,7 +64,7 @@ pub fn deserialize_wallet_mappings(data: &[u8]) -> Result<Vec<WalletMapping>, Re
         .collect()
 }
 
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 fn find_wallet_address(mappings: &[WalletMapping], chain_caip2: &str) -> Option<String> {
     mappings.iter().find(|m| m.chain_caip2 == chain_caip2).map(|m| m.address.clone())
 }
@@ -81,7 +81,7 @@ fn find_wallet_address(mappings: &[WalletMapping], chain_caip2: &str) -> Option<
 /// - [`ResolutionError::InvalidCaip2`] if `chain_caip2` is not a valid CAIP-2 identifier.
 /// - [`ResolutionError::DecodeError`] if the on-chain record data is malformed.
 /// - [`ResolutionError::RpcError`] on network failures.
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub fn resolve(
     rpc: &impl super::rpc::Rpc,
     name: &str,
@@ -114,7 +114,7 @@ pub fn resolve(
 /// # Errors
 /// Returns `Err` only for batch-level failures: invalid CAIP-2 chain or RPC network errors.
 /// Per-name decode and name-validation errors are returned as `Err` values inside the map.
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub fn resolve_batch(
     rpc: &impl super::rpc::Rpc,
     names: &[&str],
@@ -157,7 +157,7 @@ pub fn resolve_batch(
     Ok(result)
 }
 
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 fn resolve_one_forward(
     account_opt: Option<Vec<u8>>,
     chain: &str,
@@ -247,9 +247,9 @@ mod tests {
     }
 }
 
-// ── RPC-gated tests (require --features fetch) ────────────────────────────────
+// ── RPC-gated tests (require --features name-resolution-fetch) ────────────────
 
-#[cfg(all(test, feature = "fetch"))]
+#[cfg(all(test, feature = "name-resolution-fetch"))]
 mod fetch_tests {
     use super::*;
     use crate::resolution::rpc::Rpc;

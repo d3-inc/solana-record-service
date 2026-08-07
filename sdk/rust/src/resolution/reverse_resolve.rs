@@ -1,8 +1,8 @@
 use super::errors::ResolutionError;
 use super::shared::{deserialize_srs_mappings, serialize_srs_mappings, SrsMapping, NAME_MAPPING_TYPE};
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 use super::shared::{find_record_pda, normalize_name};
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 use solana_pubkey::Pubkey;
 
 /// The name stored in a reverse resolution record.
@@ -51,7 +51,7 @@ pub fn deserialize_name_mapping(data: &[u8]) -> Result<Option<NameMapping>, Reso
 /// # Errors
 /// - [`ResolutionError::DecodeError`] if the on-chain record data is malformed.
 /// - [`ResolutionError::RpcError`] on network failures.
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub fn reverse_resolve(
     rpc: &impl super::rpc::Rpc,
     wallet: &Pubkey,
@@ -104,7 +104,7 @@ pub fn reverse_resolve(
 /// # Errors
 /// Returns `Err` only for batch-level failures (RPC network errors). Per-wallet decode errors
 /// are returned as `Err` values inside the map.
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub fn reverse_resolve_batch(
     rpc: &impl super::rpc::Rpc,
     wallets: &[Pubkey],
@@ -163,7 +163,7 @@ pub fn reverse_resolve_batch(
     Ok(result)
 }
 
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 fn resolve_one(account_opt: Option<Vec<u8>>) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
     let Some(data) = account_opt else { return Ok(None) };
@@ -244,9 +244,9 @@ mod tests {
     }
 }
 
-// ── RPC-gated tests (require --features fetch) ────────────────────────────────
+// ── RPC-gated tests (require --features name-resolution-fetch) ────────────────
 
-#[cfg(all(test, feature = "fetch"))]
+#[cfg(all(test, feature = "name-resolution-fetch"))]
 mod fetch_tests {
     use super::*;
     use crate::resolution::resolve::{find_name_record_pda, serialize_wallet_mappings, WalletMapping};

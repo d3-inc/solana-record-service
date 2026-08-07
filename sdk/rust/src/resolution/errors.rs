@@ -12,7 +12,7 @@ pub enum ResolutionError {
     /// `forward_class_address` was not supplied when forward-verification was requested.
     MissingForwardClassAddress,
     /// An RPC call failed.
-    #[cfg(feature = "fetch")]
+    #[cfg(feature = "name-resolution-fetch")]
     RpcError(String),
 }
 
@@ -26,7 +26,7 @@ impl fmt::Display for ResolutionError {
                 f,
                 "forward_class_address is required when forward verification is enabled"
             ),
-            #[cfg(feature = "fetch")]
+            #[cfg(feature = "name-resolution-fetch")]
             Self::RpcError(msg) => write!(f, "RPC error: {}", msg),
         }
     }

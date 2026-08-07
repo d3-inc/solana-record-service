@@ -2,7 +2,7 @@ pub mod errors;
 pub mod resolve;
 pub mod reverse_resolve;
 pub mod shared;
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub mod rpc;
 
 pub use errors::ResolutionError;
@@ -17,9 +17,9 @@ pub use shared::{
     WALLET_MAPPING_TYPE,
 };
 
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub use resolve::{resolve, resolve_batch};
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub use reverse_resolve::{reverse_resolve, reverse_resolve_batch};
-#[cfg(feature = "fetch")]
+#[cfg(feature = "name-resolution-fetch")]
 pub use rpc::Rpc;
