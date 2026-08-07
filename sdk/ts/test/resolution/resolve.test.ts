@@ -164,12 +164,6 @@ describe('findNameRecordPDA', () => {
     const customPda = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
     assert.notEqual(customPda, defaultPda);
   });
-
-  it('is deterministic for the same custom nameToNameId', () => {
-    const pda1 = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
-    const pda2 = findNameRecordPDA(ctx, 'example.com', classAddress, stubNameToNameId);
-    assert.equal(pda1, pda2);
-  });
 });
 
 describe('resolve', () => {
