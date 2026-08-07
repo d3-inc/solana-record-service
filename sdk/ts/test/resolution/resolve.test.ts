@@ -377,7 +377,9 @@ describe('resolveBatch', () => {
   it('honors a custom nameToNameId override for every name in the batch', async () => {
     const umi = createUmi('http://test.local');
     const names = ['alice.com', 'bob.com'];
-    const expectedPdas = names.map((n) => findNameRecordPDA(umi, n, CLASS_ADDRESS, stubNameToNameId));
+    const expectedPdas = names.map((n) =>
+      findNameRecordPDA(umi, n, CLASS_ADDRESS, stubNameToNameId),
+    );
     let requestedPks: PublicKey[] = [];
     const ctx = {
       programs: umi.programs,
