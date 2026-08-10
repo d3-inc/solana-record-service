@@ -12,6 +12,7 @@ import {
   sanitizeRpcOptions,
   serializeSrsMappings,
   validateAndNormalizeCAIP2,
+  type NameToNameId,
 } from './shared';
 
 /**
@@ -33,13 +34,21 @@ const walletMappingPayloadCodec = tuple([
   string({ size: u32() }),
 ] as const);
 
-/** Derives the on-chain PDA for a forward resolution record. */
+/**
+ * Derives the on-chain PDA for a forward resolution record.
+ *
+ * @param nameToNameId - Overrides the default `name` → `nameId` mapping. Defaults to {@link namehash}.
+ */
 export function findNameRecordPDA(
   context: Pick<Context, 'programs' | 'eddsa'>,
   name: string,
   classAddress: PublicKey,
+  nameToNameId: NameToNameId = namehash,
 ): PublicKey {
-  const nameId = namehash(name);
+  const nameId = nameToNameId(name);
+  if (nameId.length !== 32) {
+    throw new Error(`nameToNameId must return a 32-byte seed, got ${nameId.length}`);
+  }
   const [recordPda] = findRecordPda(context, classAddress, nameId);
 
   return recordPda;
@@ -59,6 +68,8 @@ export type ResolveResult =
 export type ResolveOptions = {
   /** CAIP-2 chain to look up. Defaults to {@link DEFAULT_SOLANA_CAIP2}. */
   chainCaip2?: string;
+  /** Overrides the default `name` → `nameId` mapping. Defaults to {@link namehash}. */
+  nameToNameId?: NameToNameId;
 } & RpcBaseOptions;
 
 /**
@@ -79,7 +90,7 @@ export async function resolve(
 ): Promise<string | null> {
   const chainCaip2 = validateAndNormalizeCAIP2(options?.chainCaip2 ?? DEFAULT_SOLANA_CAIP2);
 
-  const recordPda = findNameRecordPDA(context, name, classAddress);
+  const recordPda = findNameRecordPDA(context, name, classAddress, options?.nameToNameId);
 
   const record = await safeFetchRecord(context, recordPda, sanitizeRpcOptions(options));
   if (!record) {
@@ -122,7 +133,7 @@ export async function resolveBatch(
 
   for (const name of names) {
     try {
-      validPdas.push(findNameRecordPDA(context, name, classAddress));
+      validPdas.push(findNameRecordPDA(context, name, classAddress, options?.nameToNameId));
       validNames.push(name);
     } catch (e) {
       if (e instanceof ResolutionInvalidNameError) {

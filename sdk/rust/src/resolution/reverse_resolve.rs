@@ -1,7 +1,9 @@
 use super::errors::ResolutionError;
-use super::shared::{deserialize_srs_mappings, serialize_srs_mappings, SrsMapping, NAME_MAPPING_TYPE};
+use super::shared::{
+    deserialize_srs_mappings, serialize_srs_mappings, SrsMapping, NAME_MAPPING_TYPE,
+};
 #[cfg(feature = "name-resolution-fetch")]
-use super::shared::{find_record_pda, normalize_name};
+use super::shared::{find_record_pda, normalize_name, NameToNameId};
 #[cfg(feature = "name-resolution-fetch")]
 use solana_pubkey::Pubkey;
 
@@ -18,8 +20,13 @@ pub struct NameMapping {
 pub fn serialize_name_mapping(mapping: &NameMapping) -> Vec<u8> {
     use borsh::BorshSerialize;
     let mut payload = Vec::new();
-    mapping.serialize(&mut payload).expect("NameMapping Borsh serialization is infallible");
-    serialize_srs_mappings(&[SrsMapping { mapping_type: NAME_MAPPING_TYPE, data: payload }])
+    mapping
+        .serialize(&mut payload)
+        .expect("NameMapping Borsh serialization is infallible");
+    serialize_srs_mappings(&[SrsMapping {
+        mapping_type: NAME_MAPPING_TYPE,
+        data: payload,
+    }])
 }
 
 /// Deserializes an `SrsRecordData` blob into a [`NameMapping`].
@@ -31,7 +38,10 @@ pub fn serialize_name_mapping(mapping: &NameMapping) -> Vec<u8> {
 pub fn deserialize_name_mapping(data: &[u8]) -> Result<Option<NameMapping>, ResolutionError> {
     use borsh::BorshDeserialize;
     let srs_mappings = deserialize_srs_mappings(data)?;
-    let Some(m) = srs_mappings.into_iter().find(|m| m.mapping_type == NAME_MAPPING_TYPE) else {
+    let Some(m) = srs_mappings
+        .into_iter()
+        .find(|m| m.mapping_type == NAME_MAPPING_TYPE)
+    else {
         return Ok(None);
     };
     NameMapping::deserialize(&mut m.data.as_slice())
@@ -57,6 +67,7 @@ pub fn reverse_resolve(
     wallet: &Pubkey,
     class_address: &Pubkey,
     forward_class_address: Option<&Pubkey>,
+    name_to_name_id: Option<&NameToNameId>,
 ) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
     use crate::resolution::resolve::{resolve, DEFAULT_SOLANA_CAIP2};
@@ -68,8 +79,8 @@ pub fn reverse_resolve(
         return Ok(None);
     };
 
-    let record = Record::from_bytes(&data)
-        .map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
+    let record =
+        Record::from_bytes(&data).map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
 
     let Some(name_mapping) = deserialize_name_mapping(&record.data)? else {
         return Ok(None);
@@ -78,7 +89,13 @@ pub fn reverse_resolve(
     let name = normalize_name(&format!("{}.{}", name_mapping.sld, name_mapping.tld))?;
 
     if let Some(fwd_class) = forward_class_address {
-        let resolved = resolve(rpc, &name, fwd_class, Some(DEFAULT_SOLANA_CAIP2))?;
+        let resolved = resolve(
+            rpc,
+            &name,
+            fwd_class,
+            Some(DEFAULT_SOLANA_CAIP2),
+            name_to_name_id,
+        )?;
         match resolved {
             Some(ref addr) if addr == &wallet.to_string() => {}
             _ => return Ok(None),
@@ -110,8 +127,11 @@ pub fn reverse_resolve_batch(
     wallets: &[Pubkey],
     class_address: &Pubkey,
     forward_class_address: Option<&Pubkey>,
-) -> Result<std::collections::HashMap<Pubkey, Result<Option<String>, ResolutionError>>, ResolutionError>
-{
+    name_to_name_id: Option<&NameToNameId>,
+) -> Result<
+    std::collections::HashMap<Pubkey, Result<Option<String>, ResolutionError>>,
+    ResolutionError,
+> {
     use crate::resolution::resolve::{resolve_batch, DEFAULT_SOLANA_CAIP2};
     use std::collections::HashMap;
 
@@ -119,8 +139,10 @@ pub fn reverse_resolve_batch(
         return Ok(HashMap::new());
     }
 
-    let reverse_pdas: Vec<Pubkey> =
-        wallets.iter().map(|w| find_record_pda(class_address, &w.to_bytes()).0).collect();
+    let reverse_pdas: Vec<Pubkey> = wallets
+        .iter()
+        .map(|w| find_record_pda(class_address, &w.to_bytes()).0)
+        .collect();
 
     let accounts = rpc.get_multiple_accounts(&reverse_pdas)?;
 
@@ -142,12 +164,20 @@ pub fn reverse_resolve_batch(
     if let Some(fwd_class) = forward_class_address {
         // Deduplicate names, then verify all with a single resolve_batch call.
         let mut seen = std::collections::HashSet::new();
-        let unique_names: Vec<String> =
-            resolved_names.values().filter(|n| seen.insert((*n).clone())).cloned().collect();
+        let unique_names: Vec<String> = resolved_names
+            .values()
+            .filter(|n| seen.insert((*n).clone()))
+            .cloned()
+            .collect();
         let unique_name_refs: Vec<&str> = unique_names.iter().map(String::as_str).collect();
 
-        let forward_results =
-            resolve_batch(rpc, &unique_name_refs, fwd_class, Some(DEFAULT_SOLANA_CAIP2))?;
+        let forward_results = resolve_batch(
+            rpc,
+            &unique_name_refs,
+            fwd_class,
+            Some(DEFAULT_SOLANA_CAIP2),
+            name_to_name_id,
+        )?;
 
         for (wallet, name) in &resolved_names {
             let matches = match forward_results.get(name.as_str()) {
@@ -166,15 +196,30 @@ pub fn reverse_resolve_batch(
 #[cfg(feature = "name-resolution-fetch")]
 fn resolve_one(account_opt: Option<Vec<u8>>) -> Result<Option<String>, ResolutionError> {
     use crate::client::accounts::record::Record;
-    let Some(data) = account_opt else { return Ok(None) };
+    let Some(data) = account_opt else {
+        return Ok(None);
+    };
     let record =
         Record::from_bytes(&data).map_err(|e| ResolutionError::DecodeError(e.to_string()))?;
-    let Some(name_mapping) = deserialize_name_mapping(&record.data)? else { return Ok(None) };
+    let Some(name_mapping) = deserialize_name_mapping(&record.data)? else {
+        return Ok(None);
+    };
     let name = normalize_name(&format!("{}.{}", name_mapping.sld, name_mapping.tld))?;
     Ok(Some(name))
 }
 
 // ── Tests ────────────────────────────────────────────────────────────────────
+
+// Deterministic stand-in for `namehash` used to prove a custom `name_to_name_id` override is
+// honored: truncates/pads the name's UTF-8 bytes into a 32-byte seed instead of hashing it.
+#[cfg(all(test, feature = "name-resolution-fetch"))]
+fn stub_name_to_name_id(name: &str) -> Result<[u8; 32], ResolutionError> {
+    let mut seed = [0u8; 32];
+    let bytes = name.as_bytes();
+    let n = bytes.len().min(32);
+    seed[..n].copy_from_slice(&bytes[..n]);
+    Ok(seed)
+}
 
 #[cfg(test)]
 mod tests {
@@ -186,7 +231,10 @@ mod tests {
 
     #[test]
     fn round_trip_example_com() {
-        let original = NameMapping { sld: "example".to_string(), tld: "com".to_string() };
+        let original = NameMapping {
+            sld: "example".to_string(),
+            tld: "com".to_string(),
+        };
         let bytes = serialize_name_mapping(&original);
         let decoded = deserialize_name_mapping(&bytes).unwrap();
         assert_eq!(decoded, Some(original));
@@ -249,7 +297,9 @@ mod tests {
 #[cfg(all(test, feature = "name-resolution-fetch"))]
 mod fetch_tests {
     use super::*;
-    use crate::resolution::resolve::{find_name_record_pda, serialize_wallet_mappings, WalletMapping};
+    use crate::resolution::resolve::{
+        find_name_record_pda, serialize_wallet_mappings, WalletMapping,
+    };
     use crate::resolution::rpc::Rpc;
     use std::collections::HashMap;
 
@@ -276,14 +326,14 @@ mod fetch_tests {
         // Manual layout: disc(1) + class(32) + owner_type(1) + owner(32)
         //                + is_frozen(1) + expiry(8) + seed_len_u8(1) + srs_data
         let mut bytes = Vec::with_capacity(76 + srs_data.len());
-        bytes.push(0u8);                         // discriminator
-        bytes.extend_from_slice(&[0u8; 32]);     // class = default Pubkey
-        bytes.push(0u8);                         // owner_type
-        bytes.extend_from_slice(&[0u8; 32]);     // owner = default Pubkey
-        bytes.push(0u8);                         // is_frozen = false
+        bytes.push(0u8); // discriminator
+        bytes.extend_from_slice(&[0u8; 32]); // class = default Pubkey
+        bytes.push(0u8); // owner_type
+        bytes.extend_from_slice(&[0u8; 32]); // owner = default Pubkey
+        bytes.push(0u8); // is_frozen = false
         bytes.extend_from_slice(&0i64.to_le_bytes()); // expiry = 0
-        bytes.push(0u8);                         // U8PrefixVec seed length = 0
-        bytes.extend_from_slice(&srs_data);      // RemainderVec data (no framing)
+        bytes.push(0u8); // U8PrefixVec seed length = 0
+        bytes.extend_from_slice(&srs_data); // RemainderVec data (no framing)
         bytes
     }
 
@@ -309,7 +359,7 @@ mod fetch_tests {
         let wallet = Pubkey::new_unique();
         let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
         let rpc = MockRpc(HashMap::from([(rev_pda, reverse_record("example", "com"))]));
-        let result = reverse_resolve(&rpc, &wallet, &class, None).unwrap();
+        let result = reverse_resolve(&rpc, &wallet, &class, None, None).unwrap();
         assert_eq!(result, Some("example.com".to_string()));
     }
 
@@ -318,7 +368,7 @@ mod fetch_tests {
         let class = Pubkey::default();
         let wallet = Pubkey::new_unique();
         let rpc = MockRpc(HashMap::new());
-        let result = reverse_resolve(&rpc, &wallet, &class, None).unwrap();
+        let result = reverse_resolve(&rpc, &wallet, &class, None, None).unwrap();
         assert_eq!(result, None);
     }
 
@@ -327,12 +377,12 @@ mod fetch_tests {
         let class = Pubkey::default();
         let wallet = Pubkey::new_unique();
         let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
-        let fwd_pda = find_name_record_pda("example.com", &class).unwrap();
+        let fwd_pda = find_name_record_pda("example.com", &class, None).unwrap();
         let rpc = MockRpc(HashMap::from([
             (rev_pda, reverse_record("example", "com")),
             (fwd_pda, forward_record("solana:_", &wallet.to_string())),
         ]));
-        let result = reverse_resolve(&rpc, &wallet, &class, Some(&class)).unwrap();
+        let result = reverse_resolve(&rpc, &wallet, &class, Some(&class), None).unwrap();
         assert_eq!(result, Some("example.com".to_string()));
     }
 
@@ -341,14 +391,32 @@ mod fetch_tests {
         let class = Pubkey::default();
         let wallet = Pubkey::new_unique();
         let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
-        let fwd_pda = find_name_record_pda("example.com", &class).unwrap();
+        let fwd_pda = find_name_record_pda("example.com", &class, None).unwrap();
         let rpc = MockRpc(HashMap::from([
             (rev_pda, reverse_record("example", "com")),
             // forward record points to a DIFFERENT wallet — mismatch
-            (fwd_pda, forward_record("solana:_", "different_wallet_address")),
+            (
+                fwd_pda,
+                forward_record("solana:_", "different_wallet_address"),
+            ),
         ]));
-        let result = reverse_resolve(&rpc, &wallet, &class, Some(&class)).unwrap();
+        let result = reverse_resolve(&rpc, &wallet, &class, Some(&class), None).unwrap();
         assert_eq!(result, None);
+    }
+
+    #[test]
+    fn reverse_resolve_uses_custom_name_to_name_id_for_forward_verification() {
+        let class = Pubkey::default();
+        let wallet = Pubkey::new_unique();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
+        let fwd_pda = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        let rpc = MockRpc(HashMap::from([
+            (rev_pda, reverse_record("example", "com")),
+            (fwd_pda, forward_record("solana:_", &wallet.to_string())),
+        ]));
+        let result = reverse_resolve(&rpc, &wallet, &class, Some(&class), Some(custom)).unwrap();
+        assert_eq!(result, Some("example.com".to_string()));
     }
 
     // ── reverse_resolve_batch: error propagation ──────────────────────────────
@@ -358,7 +426,7 @@ mod fetch_tests {
         wallet: Pubkey,
         class: &Pubkey,
     ) -> Result<Option<String>, ResolutionError> {
-        reverse_resolve_batch(rpc, &[wallet], class, None)
+        reverse_resolve_batch(rpc, &[wallet], class, None, None)
             .unwrap()
             .remove(&wallet)
             .unwrap()
@@ -371,7 +439,10 @@ mod fetch_tests {
         let wallet = Pubkey::new_unique();
         let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
         let rpc = MockRpc(HashMap::from([(rev_pda, b"garbage".to_vec())]));
-        assert!(matches!(batch_one(&rpc, wallet, &class), Err(ResolutionError::DecodeError(_))));
+        assert!(matches!(
+            batch_one(&rpc, wallet, &class),
+            Err(ResolutionError::DecodeError(_))
+        ));
     }
 
     #[test]
@@ -380,8 +451,14 @@ mod fetch_tests {
         let class = Pubkey::default();
         let wallet = Pubkey::new_unique();
         let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
-        let rpc = MockRpc(HashMap::from([(rev_pda, make_account_bytes(b"not_srs!".to_vec()))]));
-        assert!(matches!(batch_one(&rpc, wallet, &class), Err(ResolutionError::DecodeError(_))));
+        let rpc = MockRpc(HashMap::from([(
+            rev_pda,
+            make_account_bytes(b"not_srs!".to_vec()),
+        )]));
+        assert!(matches!(
+            batch_one(&rpc, wallet, &class),
+            Err(ResolutionError::DecodeError(_))
+        ));
     }
 
     #[test]
@@ -408,7 +485,10 @@ mod fetch_tests {
             chain_caip2: "solana:_".to_string(),
             address: wallet.to_string(),
         }]);
-        let rpc = MockRpc(HashMap::from([(rev_pda, make_account_bytes(wallet_only_srs))]));
+        let rpc = MockRpc(HashMap::from([(
+            rev_pda,
+            make_account_bytes(wallet_only_srs),
+        )]));
         assert_eq!(batch_one(&rpc, wallet, &class).unwrap(), None);
     }
 
@@ -423,8 +503,8 @@ mod fetch_tests {
 
         let (rev_pda_w1, _) = find_record_pda(&class, &w1.to_bytes());
         let (rev_pda_w2, _) = find_record_pda(&class, &w2.to_bytes());
-        let fwd_pda_w1 = find_name_record_pda("example.com", &class).unwrap();
-        let fwd_pda_w2 = find_name_record_pda("another.net", &class).unwrap();
+        let fwd_pda_w1 = find_name_record_pda("example.com", &class, None).unwrap();
+        let fwd_pda_w2 = find_name_record_pda("another.net", &class, None).unwrap();
 
         let rpc = MockRpc(HashMap::from([
             (rev_pda_w1, reverse_record("example", "com")),
@@ -433,11 +513,34 @@ mod fetch_tests {
             (fwd_pda_w2, forward_record("solana:_", "wrong_addr")),
         ]));
 
-        let result = reverse_resolve_batch(&rpc, &[w1, w2, w3], &class, Some(&class)).unwrap();
+        let result =
+            reverse_resolve_batch(&rpc, &[w1, w2, w3], &class, Some(&class), None).unwrap();
 
         assert_eq!(result.len(), 3);
-        assert_eq!(result[&w1].as_ref().unwrap(), &Some("example.com".to_string()));
+        assert_eq!(
+            result[&w1].as_ref().unwrap(),
+            &Some("example.com".to_string())
+        );
         assert_eq!(result[&w2].as_ref().unwrap(), &None); // mismatch → Ok(None)
         assert_eq!(result[&w3].as_ref().unwrap(), &None); // missing → Ok(None)
+    }
+
+    #[test]
+    fn reverse_resolve_batch_uses_custom_name_to_name_id_for_forward_verification() {
+        let class = Pubkey::default();
+        let wallet = Pubkey::new_unique();
+        let custom: &NameToNameId = &stub_name_to_name_id;
+        let (rev_pda, _) = find_record_pda(&class, &wallet.to_bytes());
+        let fwd_pda = find_name_record_pda("example.com", &class, Some(custom)).unwrap();
+        let rpc = MockRpc(HashMap::from([
+            (rev_pda, reverse_record("example", "com")),
+            (fwd_pda, forward_record("solana:_", &wallet.to_string())),
+        ]));
+        let result =
+            reverse_resolve_batch(&rpc, &[wallet], &class, Some(&class), Some(custom)).unwrap();
+        assert_eq!(
+            result[&wallet].as_ref().unwrap(),
+            &Some("example.com".to_string())
+        );
     }
 }
