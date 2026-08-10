@@ -6,3 +6,6 @@
 //!
 pub mod client;
 pub use client::*;
+
+#[cfg(feature = "name-resolution")]
+pub mod resolution;

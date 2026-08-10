@@ -1,15 +1,5 @@
-import { renderJavaScriptUmiVisitor, renderJavaScriptVisitor, renderRustVisitor } from '@codama/renderers';
-import { accountNode, arrayTypeNode, arrayValueNode, booleanTypeNode, bytesTypeNode, constantDiscriminatorNode, constantValueNode, createFromRoot, definedTypeLinkNode, definedTypeNode, instructionAccountNode, instructionArgumentNode, instructionNode, numberTypeNode, numberValueNode, optionTypeNode, prefixedCountNode, programNode, publicKeyTypeNode, publicKeyValueNode, REGISTERED_COUNT_NODE_KINDS, rootNode, sizeDiscriminatorNode, sizePrefixTypeNode, stringTypeNode, stringValueNode, structFieldTypeNode, structTypeNode, tupleTypeNode, tupleValueNode } from "codama"
-import path from "path";
-import fs from "fs";
-
-const rustClientsDir = path.join(__dirname, "..", "sdk", "rust");
-const typescriptClientsDir = path.join(
-  __dirname,
-  "..",
-  "sdk",
-  "ts",
-);
+import { renderJavaScriptUmiVisitor, renderRustVisitor } from '@codama/renderers';
+import { accountNode, arrayTypeNode, booleanTypeNode, bytesTypeNode, constantDiscriminatorNode, constantValueNode, createFromRoot, definedTypeLinkNode, definedTypeNode, instructionAccountNode, instructionArgumentNode, instructionNode, numberTypeNode, numberValueNode, optionTypeNode, prefixedCountNode, programNode, publicKeyTypeNode, publicKeyValueNode, rootNode, sizePrefixTypeNode, stringTypeNode, stringValueNode, structFieldTypeNode, structTypeNode } from "codama"
 
 const root = rootNode(
     programNode({
@@ -901,36 +891,7 @@ const root = rootNode(
     })
 )
 
-function preserveConfigFiles() {
-    const filesToPreserve = ['package.json', 'tsconfig.json', '.npmignore', 'pnpm-lock.yaml', 'Cargo.toml'];
-    const preservedFiles = new Map();
-    
-    filesToPreserve.forEach(filename => {
-      const filePath = path.join(typescriptClientsDir, filename);
-      const tempPath = path.join(typescriptClientsDir, `${filename}.temp`);
-      
-      if (fs.existsSync(filePath)) {
-        fs.copyFileSync(filePath, tempPath);
-        preservedFiles.set(filename, tempPath);
-      }
-    });
-    
-    return {
-      restore: () => {
-        preservedFiles.forEach((tempPath, filename) => {
-          const filePath = path.join(typescriptClientsDir, filename);
-          if (fs.existsSync(tempPath)) {
-            fs.copyFileSync(tempPath, filePath);
-            fs.unlinkSync(tempPath);
-          }
-        });
-      }
-    };
-  }
-
 const codama = createFromRoot(root)
 
-const configPreserver = preserveConfigFiles();
-
-codama.accept(renderJavaScriptUmiVisitor('sdk/ts/src', { formatCode: true }));
+codama.accept(renderJavaScriptUmiVisitor('sdk/ts/src/generated', { formatCode: true }));
 codama.accept(renderRustVisitor('sdk/rust/src/client', { crateFolder: 'sdk/rust/', formatCode: true }));
