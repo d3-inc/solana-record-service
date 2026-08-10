@@ -56,6 +56,8 @@ const nameMappingPayloadCodec = tuple([string({ size: u32() }), string({ size: u
  *
  * When `verifyReverseWithForward` is set to `true`, the result is verified by
  * forward-resolving the returned name and confirming it maps back to `wallet`.
+ * This is the recommended option to ensure the reverse record is not stale or maliciously set.
+ * Enabled by default.
  *
  * @param wallet - The wallet public key to look up.
  * @param classAddress - The SRS class account that owns the reverse record.
@@ -83,7 +85,8 @@ export async function reverseResolve(
 
   const name = normalizeName(`${nameMapping.sld}.${nameMapping.tld}`);
 
-  if (!options?.verifyReverseWithForward) {
+  const verifyReverseWithForward = options?.verifyReverseWithForward ?? true;
+  if (!verifyReverseWithForward) {
     return name;
   }
 
@@ -172,7 +175,13 @@ export async function reverseResolveBatch(
   for (const [wallet, name] of Object.entries(resolvedNames)) {
     const fwdResult = forwardResults[name];
     const resolvedAddress = fwdResult?.ok ? fwdResult.value : null;
-    if (!resolvedAddress || publicKey(resolvedAddress) !== wallet) {
+    try {
+      if (!resolvedAddress || publicKey(resolvedAddress) !== wallet) {
+        result[wallet] = { ok: true, value: null };
+      }
+    } catch {
+      // This can happen if the forward-resolved address is malformed.
+      // In that case, we treat it as a mismatch.
       result[wallet] = { ok: true, value: null };
     }
   }
