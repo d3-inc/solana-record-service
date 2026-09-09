@@ -3,6 +3,12 @@ name: Crates Publish
 on:
   workflow_dispatch:
 
+# This job only reads repository content.  Without an explicit permissions
+# block the job inherits the repository's default token scope, which on older
+# repositories may be read/write across every scope the token carries.
+permissions:
+  contents: read
+
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -21,6 +27,14 @@ jobs:
         run: cargo build
       - name: Publish Rust crate
         working-directory: sdk/rust
-        run: cargo publish --locked --token ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        # cargo reads CARGO_REGISTRY_TOKEN from the environment automatically;
+        # no --token flag is required.  The earlier form used
+        # `--token ${{ secrets.CARGO_REGISTRY_TOKEN }}`, which interpolated the
+        # raw token value into the shell command text before bash parsed it.
+        # That made the value visible in the process listing and in runner logs,
+        # and any shell metacharacter in the token would have been executed as a
+        # shell command.  Passing the token only through env: keeps the value
+        # out of the command-line text entirely.
+        run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
